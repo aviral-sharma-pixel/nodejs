@@ -87,30 +87,30 @@ export default function MyTicketsPage() {
   }, [tickets, searchQuery]);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0a0e27' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f5f7' }}>
       <Sidebar onBulkCloseClick={() => setShowBulkCloseModal(true)} onLogout={handleLogout} />
-      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: '#0f1729' }}>
+      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: '#f5f5f7' }}>
         {/* Header */}
-        <div style={{ marginBottom: '2.5rem' }}>
-          <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', background: 'linear-gradient(to right, #fff, #a5f3fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>My Tickets 📋</h1>
-          <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem' }}>All tickets assigned to you</p>
+        <div style={{ marginBottom: '2.5rem', animation: 'fadeIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
+          <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', color: '#000' }}>My Tickets 📋</h1>
+          <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem', color: '#666' }}>All tickets assigned to you</p>
         </div>
 
         {error && (
-          <div style={{ padding: '1.5rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', alignItems: 'center', gap: '1rem', color: '#fca5a5', marginBottom: '2rem', borderRadius: '12px' }}>
+          <div style={{ padding: '1.5rem', backgroundColor: 'rgba(255, 59, 48, 0.1)', border: '1px solid rgba(255, 59, 48, 0.3)', display: 'flex', alignItems: 'center', gap: '1rem', color: '#FF3B30', marginBottom: '2rem', borderRadius: '12px' }}>
             <AlertCircle size={24} />
             <div>
-              <h3 style={{ margin: 0 }}>Error Loading Tickets</h3>
-              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.8, fontSize: '0.825rem' }}>{error}</p>
+              <h3 style={{ margin: 0, color: '#FF3B30' }}>Error Loading Tickets</h3>
+              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.8, fontSize: '0.825rem', color: '#FF3B30' }}>{error}</p>
             </div>
           </div>
         )}
 
         {/* Search Bar */}
         {!loading && !error && tickets.length > 0 && (
-          <div style={{ marginBottom: '2rem', marginTop: '2rem' }}>
+          <div style={{ marginBottom: '2rem', marginTop: '2rem', animation: 'slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
             <div style={{ position: 'relative' }}>
-              <Search size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+              <Search size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, pointerEvents: 'none', color: '#666' }} />
               <input 
                 type="text" 
                 placeholder="Search by ticket ID or summary..." 
@@ -118,15 +118,26 @@ export default function MyTicketsPage() {
                 onChange={(e) => setSearchQuery(e.target.value)} 
                 style={{ 
                   width: '100%', 
-                  padding: '1rem 1.25rem 1rem 3rem', 
-                  borderRadius: '10px', 
-                  border: '1px solid rgba(255,255,255,0.1)', 
-                  backgroundColor: 'rgba(25, 28, 50, 0.6)', 
-                  color: 'var(--foreground)', 
+                  padding: '0.875rem 1.25rem 0.875rem 3rem', 
+                  borderRadius: '12px', 
+                  border: '1px solid #e5e5ea', 
+                  backgroundColor: 'rgba(255,255,255,0.8)', 
+                  color: '#000', 
                   fontSize: '0.95rem', 
                   boxSizing: 'border-box', 
-                  backdropFilter: 'blur(8px)' 
-                }} 
+                  backdropFilter: 'blur(8px)',
+                  transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#007AFF';
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.95)';
+                  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0, 122, 255, 0.1)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#e5e5ea';
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
               />
             </div>
           </div>
@@ -135,17 +146,17 @@ export default function MyTicketsPage() {
         {/* Tickets */}
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem 0' }}>
-            <RefreshCw size={40} color="var(--primary)" style={{ animation: 'spin 1s linear infinite' }} />
+            <RefreshCw size={40} color="#007AFF" style={{ animation: 'spin 1s linear infinite' }} />
           </div>
         ) : !error && filteredTickets.length === 0 ? (
-          <div style={{ padding: '4rem 2rem', textAlign: 'center', backgroundColor: 'rgba(25, 28, 50, 0.4)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <h2 style={{ margin: 0, fontSize: '1.5rem' }}>No tickets found</h2>
-            <p style={{ margin: '0.75rem 0 0 0', opacity: 0.6 }}>{tickets.length === 0 ? 'You have no tickets assigned to you.' : 'Try adjusting your search'}</p>
+          <div style={{ padding: '4rem 2rem', textAlign: 'center', backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: '12px', border: '1px solid #e5e5ea', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.04)' }}>
+            <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#000' }}>No tickets found</h2>
+            <p style={{ margin: '0.75rem 0 0 0', opacity: 0.6, color: '#666' }}>{tickets.length === 0 ? 'You have no tickets assigned to you.' : 'Try adjusting your search'}</p>
           </div>
         ) : (
           <div>
-            <p style={{ opacity: 0.6, fontSize: '0.875rem', marginBottom: '1.5rem', fontWeight: '500' }}>
-              Showing <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{filteredTickets.length}</span> of <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{tickets.length}</span> tickets
+            <p style={{ opacity: 0.6, fontSize: '0.875rem', marginBottom: '1.5rem', fontWeight: '500', color: '#666' }}>
+              Showing <span style={{ color: '#007AFF', fontWeight: '600' }}>{filteredTickets.length}</span> of <span style={{ color: '#007AFF', fontWeight: '600' }}>{tickets.length}</span> tickets
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '1.75rem' }}>
               {filteredTickets.map(ticket => (

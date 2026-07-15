@@ -8,10 +8,10 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
-    { icon: CheckSquare, label: 'My Tickets', href: '/my-tickets' },
-    { icon: Search, label: 'Search', href: '/search' },
-    { icon: Calendar, label: 'Calendar', href: '/calendar' }
+    { icon: LayoutDashboard, label: 'Dashboard', href: '/', emoji: '📊' },
+    { icon: CheckSquare, label: 'My Tickets', href: '/my-tickets', emoji: '✅' },
+    { icon: Search, label: 'Search', href: '/search', emoji: '🔍' },
+    { icon: Calendar, label: 'Calendar', href: '/calendar', emoji: '📅' }
   ];
 
   const isActive = (href) => {
@@ -21,27 +21,28 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
   return (
     <div style={{
       width: '280px',
-      backgroundColor: 'rgba(15, 23, 42, 0.8)',
-      borderRight: '1px solid var(--card-border)',
+      backgroundColor: 'rgba(255,255,255,0.7)',
+      borderRight: '1px solid #e5e5ea',
       padding: '2rem 0',
       height: '100vh',
       position: 'fixed',
       left: 0,
       top: 0,
-      overflowY: 'auto'
+      overflowY: 'auto',
+      backdropFilter: 'blur(20px)'
     }}>
       {/* Logo */}
       <div style={{ padding: '0 1.5rem', marginBottom: '2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
-          <div style={{ backgroundColor: 'var(--primary)', padding: '0.5rem', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: '#007AFF', padding: '0.5rem', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(0, 122, 255, 0.3)' }}>
             <CheckSquare size={20} color="white" />
           </div>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '700' }}>Jira</h2>
-            <p style={{ margin: 0, fontSize: '0.65rem', opacity: 0.6 }}>Assistant</p>
+            <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: '700', color: '#000' }}>Jira</h2>
+            <p style={{ margin: 0, fontSize: '0.65rem', opacity: 0.6, color: '#666' }}>Assistant</p>
           </div>
         </div>
-        <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', opacity: 0.6 }}>Manage, Track, Close, Done</p>
+        <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', opacity: 0.6, color: '#666' }}>Manage, Track, Close, Done</p>
       </div>
 
       {/* Main Navigation */}
@@ -58,24 +59,30 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
                 gap: '0.75rem',
                 width: '100%',
                 padding: '0.875rem 1.5rem',
-                backgroundColor: active ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                backgroundColor: active ? 'rgba(0, 122, 255, 0.1)' : 'transparent',
                 border: 'none',
-                color: active ? 'var(--primary)' : 'var(--foreground)',
+                color: active ? '#007AFF' : '#000',
                 opacity: active ? 1 : 0.7,
                 textDecoration: 'none',
                 fontSize: '0.875rem',
                 fontWeight: active ? '600' : '500',
-                transition: 'all 0.2s',
-                borderLeft: active ? '3px solid var(--primary)' : '3px solid transparent',
-                cursor: 'pointer'
+                transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                borderLeft: active ? '3px solid #007AFF' : '3px solid transparent',
+                cursor: 'pointer',
+                position: 'relative'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)';
+                if (!active) {
+                  e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.04)';
+                  e.currentTarget.style.transform = 'translateX(4px)';
+                }
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = active ? 'rgba(99, 102, 241, 0.15)' : 'transparent';
+                e.currentTarget.style.backgroundColor = active ? 'rgba(0, 122, 255, 0.1)' : 'transparent';
+                e.currentTarget.style.transform = 'translateX(0)';
               }}
             >
+              <span style={{ fontSize: '1.25rem' }}>{item.emoji}</span>
               <item.icon size={18} />
               <span>{item.label}</span>
             </a>
@@ -89,32 +96,44 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
           Quick Actions
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <button onClick={() => onBulkCloseClick?.()} style={{ padding: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '6px', color: '#fca5a5', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s' }} onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(239, 68, 68, 0.3)'} onMouseLeave={(e) => e.target.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'}>
+          <button onClick={() => onBulkCloseClick?.()} style={{ padding: '0.75rem', backgroundColor: 'rgba(255, 59, 48, 0.1)', border: '1px solid rgba(255, 59, 48, 0.3)', borderRadius: '10px', color: '#FF3B30', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)' }} onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(255, 59, 48, 0.15)';
+            e.currentTarget.style.borderColor = 'rgba(255, 59, 48, 0.5)';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(255, 59, 48, 0.2)';
+          }} onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(255, 59, 48, 0.1)';
+            e.currentTarget.style.borderColor = 'rgba(255, 59, 48, 0.3)';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.04)';
+          }}>
+            <span style={{ fontSize: '1rem' }}>🚀</span>
             <CheckSquare size={16} /> Bulk Close
           </button>
         </div>
       </div>
 
       {/* Settings */}
-      <div style={{ padding: '0 1.5rem', marginTop: 'auto', borderTop: '1px solid var(--card-border)', paddingTop: '1.5rem' }}>
+      <div style={{ padding: '0 1.5rem', marginTop: 'auto', borderTop: '1px solid #e5e5ea', paddingTop: '1.5rem' }}>
         <button
           style={{
             width: '100%',
             padding: '0.75rem 0',
             backgroundColor: 'transparent',
             border: 'none',
-            color: 'var(--foreground)',
+            color: '#000',
             opacity: 0.7,
             display: 'flex',
             alignItems: 'center',
             gap: '0.75rem',
             cursor: 'pointer',
             fontSize: '0.875rem',
-            transition: 'all 0.2s'
+            transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
           }}
-          onMouseEnter={(e) => e.target.style.opacity = '1'}
-          onMouseLeave={(e) => e.target.style.opacity = '0.7'}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
         >
+          <span style={{ fontSize: '1rem' }}>⚙️</span>
           <Settings size={18} />
           <span>Settings</span>
         </button>
@@ -125,18 +144,19 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
             padding: '0.75rem 0',
             backgroundColor: 'transparent',
             border: 'none',
-            color: 'var(--foreground)',
+            color: '#000',
             opacity: 0.7,
             display: 'flex',
             alignItems: 'center',
             gap: '0.75rem',
             cursor: 'pointer',
             fontSize: '0.875rem',
-            transition: 'all 0.2s'
+            transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
           }}
-          onMouseEnter={(e) => e.target.style.opacity = '1'}
-          onMouseLeave={(e) => e.target.style.opacity = '0.7'}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
         >
+          <span style={{ fontSize: '1rem' }}>👋</span>
           <LogOut size={18} />
           <span>Logout</span>
         </button>

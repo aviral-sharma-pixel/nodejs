@@ -129,38 +129,50 @@ export default function CalendarPage() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#0a0e27' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f5f7' }}>
       <Sidebar onBulkCloseClick={() => setShowBulkCloseModal(true)} onLogout={handleLogout} />
-      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: '#0f1729' }}>
+      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: '#f5f5f7' }}>
         {/* Header */}
-        <div style={{ marginBottom: '2.5rem' }}>
-          <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', background: 'linear-gradient(to right, #fff, #a5f3fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Calendar 📅</h1>
-          <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem' }}>View tickets grouped by activity date</p>
+        <div style={{ marginBottom: '2.5rem', animation: 'fadeIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
+          <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', color: '#000' }}>Calendar 📅</h1>
+          <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem', color: '#666' }}>View tickets grouped by activity date</p>
         </div>
 
         {error && (
-          <div style={{ padding: '1.5rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', alignItems: 'center', gap: '1rem', color: '#fca5a5', marginBottom: '2rem', borderRadius: '12px' }}>
+          <div style={{ padding: '1.5rem', backgroundColor: 'rgba(255, 59, 48, 0.1)', border: '1px solid rgba(255, 59, 48, 0.3)', display: 'flex', alignItems: 'center', gap: '1rem', color: '#FF3B30', marginBottom: '2rem', borderRadius: '12px' }}>
             <AlertCircle size={24} />
             <div>
-              <h3 style={{ margin: 0 }}>Error Loading Tickets</h3>
-              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.8, fontSize: '0.825rem' }}>{error}</p>
+              <h3 style={{ margin: 0, color: '#FF3B30' }}>Error Loading Tickets</h3>
+              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.8, fontSize: '0.825rem', color: '#FF3B30' }}>{error}</p>
             </div>
           </div>
         )}
 
         {loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem 0' }}>
-            <RefreshCw size={40} color="var(--primary)" style={{ animation: 'spin 1s linear infinite' }} />
+            <RefreshCw size={40} color="#007AFF" style={{ animation: 'spin 1s linear infinite' }} />
           </div>
         ) : (
-          <div style={{ backgroundColor: 'rgba(25, 28, 50, 0.8)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', padding: '2rem', backdropFilter: 'blur(12px)' }}>
+          <div style={{ backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.5)', padding: '2rem', backdropFilter: 'blur(20px)', animation: 'slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
             {/* Month Navigation */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-              <button onClick={handlePrevMonth} style={{ padding: '0.5rem 1rem', backgroundColor: 'rgba(99, 102, 241, 0.2)', border: '1px solid var(--primary)', borderRadius: '6px', color: 'var(--primary)', cursor: 'pointer', fontWeight: '600' }}>
+              <button onClick={handlePrevMonth} style={{ padding: '0.5rem 1rem', backgroundColor: 'rgba(0, 122, 255, 0.1)', border: '1px solid #007AFF', borderRadius: '10px', color: '#007AFF', cursor: 'pointer', fontWeight: '600', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }} onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}>
                 ← Previous
               </button>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600' }}>{monthName}</h2>
-              <button onClick={handleNextMonth} style={{ padding: '0.5rem 1rem', backgroundColor: 'rgba(99, 102, 241, 0.2)', border: '1px solid var(--primary)', borderRadius: '6px', color: 'var(--primary)', cursor: 'pointer', fontWeight: '600' }}>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#000' }}>{monthName}</h2>
+              <button onClick={handleNextMonth} style={{ padding: '0.5rem 1rem', backgroundColor: 'rgba(0, 122, 255, 0.1)', border: '1px solid #007AFF', borderRadius: '10px', color: '#007AFF', cursor: 'pointer', fontWeight: '600', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }} onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}>
                 Next →
               </button>
             </div>
@@ -169,7 +181,7 @@ export default function CalendarPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem' }}>
               {/* Weekday headers */}
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} style={{ textAlign: 'center', fontWeight: '600', color: 'var(--primary)', paddingBottom: '0.75rem', fontSize: '0.875rem' }}>
+                <div key={day} style={{ textAlign: 'center', fontWeight: '600', color: '#007AFF', paddingBottom: '0.75rem', fontSize: '0.875rem' }}>
                   {day}
                 </div>
               ))}
@@ -185,17 +197,29 @@ export default function CalendarPage() {
                     key={i}
                     style={{
                       padding: '0.75rem',
-                      backgroundColor: isToday ? 'rgba(99, 102, 241, 0.2)' : day ? 'rgba(255,255,255,0.03)' : 'transparent',
-                      border: isToday ? '2px solid var(--primary)' : day ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                      borderRadius: '8px',
+                      backgroundColor: isToday ? 'rgba(0, 122, 255, 0.1)' : day ? 'rgba(0,0,0,0.02)' : 'transparent',
+                      border: isToday ? '2px solid #007AFF' : day ? '1px solid rgba(0,0,0,0.08)' : 'none',
+                      borderRadius: '12px',
                       minHeight: '100px',
                       display: 'flex',
-                      flexDirection: 'column'
+                      flexDirection: 'column',
+                      transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                      cursor: day ? 'pointer' : 'default'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (day) {
+                        e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.05)';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = isToday ? 'rgba(0, 122, 255, 0.1)' : day ? 'rgba(0,0,0,0.02)' : 'transparent';
+                      e.currentTarget.style.transform = 'translateY(0)';
                     }}
                   >
                     {day && (
                       <>
-                        <div style={{ fontWeight: isToday ? '700' : '600', marginBottom: '0.5rem', color: isToday ? 'var(--primary)' : 'var(--foreground)' }}>
+                        <div style={{ fontWeight: isToday ? '700' : '600', marginBottom: '0.5rem', color: isToday ? '#007AFF' : '#000' }}>
                           {day} {isToday && '📍'}
                         </div>
                         <div style={{ flex: 1, overflow: 'auto', fontSize: '0.75rem' }}>
@@ -204,10 +228,10 @@ export default function CalendarPage() {
                               key={idx}
                               style={{
                                 padding: '0.35rem 0.5rem',
-                                backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                                backgroundColor: 'rgba(0, 122, 255, 0.1)',
                                 borderRadius: '4px',
                                 marginBottom: '0.25rem',
-                                color: 'var(--primary)',
+                                color: '#007AFF',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis'
@@ -226,11 +250,11 @@ export default function CalendarPage() {
             </div>
 
             {/* Legend */}
-            <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-              <p style={{ fontSize: '0.875rem', opacity: 0.6 }}>
-                Total tickets with updates: <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{Object.values(ticketsByDate).flat().length}</span>
+            <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+              <p style={{ fontSize: '0.875rem', opacity: 0.7, color: '#000' }}>
+                Total tickets with updates: <span style={{ color: '#007AFF', fontWeight: '600' }}>{Object.values(ticketsByDate).flat().length}</span>
               </p>
-              <p style={{ fontSize: '0.75rem', opacity: 0.5, margin: '0.5rem 0 0 0' }}>
+              <p style={{ fontSize: '0.75rem', opacity: 0.5, margin: '0.5rem 0 0 0', color: '#666' }}>
                 📅 Tickets are grouped by their last updated date
               </p>
             </div>

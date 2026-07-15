@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import TicketCard from '@/components/TicketCard';
 import BulkCloseModal from '@/components/BulkCloseModal';
-import { AlertCircle, RefreshCw, Search, Bell, User, LogOut } from 'lucide-react';
+import { AlertCircle, RefreshCw, Search, Bell, User } from 'lucide-react';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -15,6 +15,8 @@ export default function Dashboard() {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showBulkCloseModal, setShowBulkCloseModal] = useState(false);
   const [jiraConfig, setJiraConfig] = useState(null);
+  const [settings, setSettings] = useState(null);
+  const [isDark, setIsDark] = useState(false);
 
   // Check authentication on mount
   useEffect(() => {
@@ -27,6 +29,29 @@ export default function Dashboard() {
       }
     } else {
       router.push('/login');
+    }
+
+    // Load settings and apply theme
+    const savedSettings = typeof window !== 'undefined' ? localStorage.getItem('app_settings') : null;
+    if (savedSettings) {
+      try {
+        const parsedSettings = JSON.parse(savedSettings);
+        setSettings(parsedSettings);
+        const dark = parsedSettings.theme === 'dark';
+        setIsDark(dark);
+        if (dark) {
+          document.documentElement.style.backgroundColor = '#0a0e27';
+          document.body.style.backgroundColor = '#0a0e27';
+        } else {
+          document.documentElement.style.backgroundColor = '#f5f5f7';
+          document.body.style.backgroundColor = '#f5f5f7';
+        }
+      } catch (e) {
+        console.log('Failed to load settings');
+        setSettings({ theme: 'light', autoRefreshInterval: 30 });
+      }
+    } else {
+      setSettings({ theme: 'light', autoRefreshInterval: 30 });
     }
   }, [router]);
 
@@ -64,6 +89,17 @@ export default function Dashboard() {
       fetchTickets();
     }
   }, [jiraConfig]);
+
+  // Auto-refresh effect
+  useEffect(() => {
+    if (!jiraConfig || !settings) return;
+
+    const interval = setInterval(() => {
+      fetchTickets();
+    }, settings.autoRefreshInterval * 1000);
+
+    return () => clearInterval(interval);
+  }, [jiraConfig, settings?.autoRefreshInterval]);
 
   const handleTicketClosed = (key) => {
     setTickets(tickets.filter(t => t.key !== key));
@@ -122,14 +158,14 @@ export default function Dashboard() {
   }, [tickets, selectedFilter, searchQuery]);
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f5f7' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: isDark ? '#0a0e27' : '#f5f5f7' }}>
       <Sidebar onBulkCloseClick={() => setShowBulkCloseModal(true)} onLogout={handleLogout} />
-      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: '#f5f5f7' }}>
+      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: isDark ? '#0f1729' : '#f5f5f7' }}>
         {/* Top Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', animation: 'fadeIn 0.4s ease-out' }}>
           <div>
-            <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', color: '#000' }}>Good Morning 👋</h1>
-            <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem', color: '#666' }}>Here's what's happening with your tickets today</p>
+            <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', color: isDark ? '#fff' : '#000' }}>Good Morning 👋</h1>
+            <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem', color: isDark ? '#aaa' : '#666' }}>Here's what's happening with your tickets today</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <button onClick={fetchTickets} disabled={loading} style={{ padding: '0.75rem 1.5rem', backgroundColor: 'var(--primary)', border: 'none', borderRadius: '12px', color: 'white', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 15px rgba(0, 122, 255, 0.3)', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)', opacity: loading ? 0.7 : 1 }} onMouseEnter={(e) => {
@@ -166,10 +202,10 @@ export default function Dashboard() {
         </div>
 
         {error && (
-          <div style={{ padding: '1.5rem', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', alignItems: 'center', gap: '1rem', color: '#fca5a5', marginBottom: '2rem', borderRadius: '12px' }}>
+          <div style={{ padding: '1.5rem', backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.1)', border: `1px solid ${isDark ? 'rgba(239, 68, 68, 0.4)' : 'rgba(239, 68, 68, 0.3)'}`, display: 'flex', alignItems: 'center', gap: '1rem', color: isDark ? '#fca5a5' : '#fca5a5', marginBottom: '2rem', borderRadius: '12px' }}>
             <AlertCircle size={24} />
             <div>
-              <h3 style={{ margin: 0 }}>Error Loading Tickets</h3>
+              <h3 style={{ margin: 0, color: isDark ? '#fff' : '#000' }}>Error Loading Tickets</h3>
               <p style={{ margin: '0.25rem 0 0 0', opacity: 0.8, fontSize: '0.825rem' }}>{error}</p>
             </div>
           </div>
@@ -185,11 +221,11 @@ export default function Dashboard() {
               { label: 'Blocked', value: stats.blocked, color: '#FF9500', note: '⚠️ Needs review' }
             ].map((card, i) => (
               <div key={i} style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: isDark ? 'rgba(25, 28, 50, 0.8)' : 'rgba(255, 255, 255, 0.7)',
                 backdropFilter: 'blur(20px)',
                 borderRadius: '20px',
                 padding: '1.5rem',
-                border: '1px solid rgba(255,255,255,0.5)',
+                border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.5)',
                 borderLeft: `5px solid ${card.color}`,
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.04)',
                 transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
@@ -199,18 +235,18 @@ export default function Dashboard() {
                 overflow: 'hidden'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = `rgba(255,255,255,0.7)`;
+                e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)';
                 e.currentTarget.style.transform = 'translateY(-8px)';
                 e.currentTarget.style.boxShadow = `0 16px 48px rgba(0, 0, 0, 0.1)`;
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)';
+                e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.5)';
                 e.currentTarget.style.transform = 'translateY(0)';
                 e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.04)';
               }}>
-                <p style={{ margin: 0, opacity: 0.7, fontSize: '0.85rem', fontWeight: '600', color: '#666' }}>{card.label}</p>
+                <p style={{ margin: 0, opacity: 0.7, fontSize: '0.85rem', fontWeight: '600', color: isDark ? '#aaa' : '#666' }}>{card.label}</p>
                 <h3 style={{ margin: '0.75rem 0 0 0', fontSize: '2.75rem', fontWeight: '700', color: card.color }}>{card.value}</h3>
-                <p style={{ margin: '0.75rem 0 0 0', fontSize: '0.75rem', opacity: 0.5, color: '#666' }}>{card.note}</p>
+                <p style={{ margin: '0.75rem 0 0 0', fontSize: '0.75rem', opacity: 0.5, color: isDark ? '#aaa' : '#666' }}>{card.note}</p>
               </div>
             ))}
           </div>
@@ -220,14 +256,14 @@ export default function Dashboard() {
         {!loading && !error && tickets.length > 0 && (
           <div style={{ marginBottom: '2rem', animation: 'slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
             <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
-              <Search size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, pointerEvents: 'none', color: '#666' }} />
-              <input type="text" placeholder="Search tickets by ID, summary..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.875rem 1.25rem 0.875rem 3rem', borderRadius: '12px', border: '1px solid #e5e5ea', backgroundColor: 'rgba(255,255,255,0.8)', color: '#000', fontSize: '0.95rem', boxSizing: 'border-box', backdropFilter: 'blur(8px)', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onFocus={(e) => {
+              <Search size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, pointerEvents: 'none', color: isDark ? '#aaa' : '#666' }} />
+              <input type="text" placeholder="Search tickets by ID, summary..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.875rem 1.25rem 0.875rem 3rem', borderRadius: '12px', border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e5e5ea'}`, backgroundColor: isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)', color: isDark ? '#fff' : '#000', fontSize: '0.95rem', boxSizing: 'border-box', backdropFilter: 'blur(8px)', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onFocus={(e) => {
                 e.currentTarget.style.borderColor = '#007AFF';
-                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.95)';
+                e.currentTarget.style.backgroundColor = isDark ? 'rgba(25, 28, 50, 0.8)' : 'rgba(255,255,255,0.95)';
                 e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0, 122, 255, 0.1)';
               }} onBlur={(e) => {
-                e.currentTarget.style.borderColor = '#e5e5ea';
-                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.8)';
+                e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : '#e5e5ea';
+                e.currentTarget.style.backgroundColor = isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)';
                 e.currentTarget.style.boxShadow = 'none';
               }} />
             </div>
@@ -245,9 +281,9 @@ export default function Dashboard() {
                   <button key={filter.id} onClick={() => setSelectedFilter(filter.id)} style={{
                     padding: '0.625rem 1.125rem',
                     borderRadius: '12px',
-                    border: selectedFilter === filter.id ? '2px solid #007AFF' : '1px solid #e5e5ea',
-                    backgroundColor: selectedFilter === filter.id ? 'rgba(0, 122, 255, 0.1)' : 'rgba(255,255,255,0.8)',
-                    color: selectedFilter === filter.id ? '#007AFF' : '#000',
+                    border: selectedFilter === filter.id ? '2px solid #007AFF' : `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e5e5ea'}`,
+                    backgroundColor: selectedFilter === filter.id ? 'rgba(0, 122, 255, 0.1)' : isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)',
+                    color: selectedFilter === filter.id ? '#007AFF' : isDark ? '#fff' : '#000',
                     cursor: 'pointer',
                     fontSize: '0.875rem',
                     fontWeight: selectedFilter === filter.id ? '600' : '500',
@@ -258,14 +294,14 @@ export default function Dashboard() {
                   }}
                   onMouseEnter={(e) => {
                     if (selectedFilter !== filter.id) {
-                      e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.95)';
-                      e.currentTarget.style.borderColor = '#d0d0d5';
+                      e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.95)';
+                      e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.2)' : '#d0d0d5';
                       e.currentTarget.style.transform = 'translateY(-2px)';
                     }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = selectedFilter === filter.id ? 'rgba(0, 122, 255, 0.1)' : 'rgba(255,255,255,0.8)';
-                    e.currentTarget.style.borderColor = selectedFilter === filter.id ? '2px solid #007AFF' : '1px solid #e5e5ea';
+                    e.currentTarget.style.backgroundColor = selectedFilter === filter.id ? 'rgba(0, 122, 255, 0.1)' : isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)';
+                    e.currentTarget.style.borderColor = selectedFilter === filter.id ? '2px solid #007AFF' : isDark ? 'rgba(255,255,255,0.1)' : '1px solid #e5e5ea';
                     e.currentTarget.style.transform = 'translateY(0)';
                   }}>
                     {filter.label}
@@ -307,13 +343,13 @@ export default function Dashboard() {
             <RefreshCw size={40} color="var(--primary)" style={{ animation: 'spin 1s linear infinite' }} />
           </div>
         ) : !error && filteredTickets.length === 0 ? (
-          <div style={{ padding: '4rem 2rem', textAlign: 'center', backgroundColor: 'rgba(25, 28, 50, 0.4)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <h2 style={{ margin: 0, fontSize: '1.5rem' }}>{tickets.length === 0 ? 'All Caught Up! 🎉' : 'No tickets match your search'}</h2>
-            <p style={{ margin: '0.75rem 0 0 0', opacity: 0.6 }}>{tickets.length === 0 ? 'You have no active tickets assigned to you.' : 'Try adjusting your search or filters'}</p>
+          <div style={{ padding: '4rem 2rem', textAlign: 'center', backgroundColor: isDark ? 'rgba(25, 28, 50, 0.4)' : 'rgba(25, 28, 50, 0.4)', borderRadius: '12px', border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)' }}>
+            <h2 style={{ margin: 0, fontSize: '1.5rem', color: isDark ? '#fff' : '#000' }}>{tickets.length === 0 ? 'All Caught Up! 🎉' : 'No tickets match your search'}</h2>
+            <p style={{ margin: '0.75rem 0 0 0', opacity: 0.6, color: isDark ? '#aaa' : '#666' }}>{tickets.length === 0 ? 'You have no active tickets assigned to you.' : 'Try adjusting your search or filters'}</p>
           </div>
         ) : (
           <div>
-            <p style={{ opacity: 0.6, fontSize: '0.875rem', marginBottom: '1.5rem', fontWeight: '500' }}>
+            <p style={{ opacity: 0.6, fontSize: '0.875rem', marginBottom: '1.5rem', fontWeight: '500', color: isDark ? '#aaa' : '#666' }}>
               Showing <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{filteredTickets.length}</span> of <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{tickets.length}</span> tickets
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '1.75rem' }}>

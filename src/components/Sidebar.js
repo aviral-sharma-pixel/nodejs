@@ -113,7 +113,8 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
 
       {/* Settings */}
       <div style={{ padding: '0 1.5rem', marginTop: 'auto', borderTop: '1px solid #e5e5ea', paddingTop: '1.5rem' }}>
-        <button
+        <a
+          href="/settings"
           style={{
             width: '100%',
             padding: '0.75rem 0',
@@ -126,14 +127,15 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
             gap: '0.75rem',
             cursor: 'pointer',
             fontSize: '0.875rem',
-            transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+            transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+            textDecoration: 'none'
           }}
           onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
           onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
         >
           <Settings size={18} />
           <span>Settings</span>
-        </button>
+        </a>
         <button
           onClick={onLogout}
           style={{

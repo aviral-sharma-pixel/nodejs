@@ -13,6 +13,8 @@ export default function CalendarPage() {
   const [jiraConfig, setJiraConfig] = useState(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showBulkCloseModal, setShowBulkCloseModal] = useState(false);
+  const [settings, setSettings] = useState(null);
+  const [isDark, setIsDark] = useState(false);
 
   // Check authentication on mount
   useEffect(() => {
@@ -25,6 +27,29 @@ export default function CalendarPage() {
       }
     } else {
       router.push('/login');
+    }
+
+    // Load settings and apply theme
+    const savedSettings = typeof window !== 'undefined' ? localStorage.getItem('app_settings') : null;
+    if (savedSettings) {
+      try {
+        const parsedSettings = JSON.parse(savedSettings);
+        setSettings(parsedSettings);
+        const dark = parsedSettings.theme === 'dark';
+        setIsDark(dark);
+        if (dark) {
+          document.documentElement.style.backgroundColor = '#0a0e27';
+          document.body.style.backgroundColor = '#0a0e27';
+        } else {
+          document.documentElement.style.backgroundColor = '#f5f5f7';
+          document.body.style.backgroundColor = '#f5f5f7';
+        }
+      } catch (e) {
+        console.log('Failed to load settings');
+        setSettings({ theme: 'light', autoRefreshInterval: 30 });
+      }
+    } else {
+      setSettings({ theme: 'light', autoRefreshInterval: 30 });
     }
   }, [router]);
 
@@ -62,6 +87,17 @@ export default function CalendarPage() {
       fetchTickets();
     }
   }, [jiraConfig]);
+
+  // Auto-refresh effect
+  useEffect(() => {
+    if (!jiraConfig || !settings) return;
+
+    const interval = setInterval(() => {
+      fetchTickets();
+    }, settings.autoRefreshInterval * 1000);
+
+    return () => clearInterval(interval);
+  }, [jiraConfig, settings?.autoRefreshInterval]);
 
   const handleLogout = () => {
     localStorage.removeItem('jira_config');
@@ -129,21 +165,21 @@ export default function CalendarPage() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#f5f5f7' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: isDark ? '#0a0e27' : '#f5f5f7' }}>
       <Sidebar onBulkCloseClick={() => setShowBulkCloseModal(true)} onLogout={handleLogout} />
-      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: '#f5f5f7' }}>
+      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: isDark ? '#0f1729' : '#f5f5f7' }}>
         {/* Header */}
         <div style={{ marginBottom: '2.5rem', animation: 'fadeIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
-          <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', color: '#000' }}>Calendar 📅</h1>
-          <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem', color: '#666' }}>View tickets grouped by activity date</p>
+          <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', color: isDark ? '#fff' : '#000' }}>Calendar 📅</h1>
+          <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem', color: isDark ? '#aaa' : '#666' }}>View tickets grouped by activity date</p>
         </div>
 
         {error && (
-          <div style={{ padding: '1.5rem', backgroundColor: 'rgba(255, 59, 48, 0.1)', border: '1px solid rgba(255, 59, 48, 0.3)', display: 'flex', alignItems: 'center', gap: '1rem', color: '#FF3B30', marginBottom: '2rem', borderRadius: '12px' }}>
+          <div style={{ padding: '1.5rem', backgroundColor: isDark ? 'rgba(255, 59, 48, 0.15)' : 'rgba(255, 59, 48, 0.1)', border: `1px solid ${isDark ? 'rgba(255, 59, 48, 0.4)' : 'rgba(255, 59, 48, 0.3)'}`, display: 'flex', alignItems: 'center', gap: '1rem', color: '#FF3B30', marginBottom: '2rem', borderRadius: '12px' }}>
             <AlertCircle size={24} />
             <div>
-              <h3 style={{ margin: 0, color: '#FF3B30' }}>Error Loading Tickets</h3>
-              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.8, fontSize: '0.825rem', color: '#FF3B30' }}>{error}</p>
+              <h3 style={{ margin: 0, color: isDark ? '#ff7b72' : '#FF3B30' }}>Error Loading Tickets</h3>
+              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.8, fontSize: '0.825rem' }}>{error}</p>
             </div>
           </div>
         )}
@@ -153,7 +189,7 @@ export default function CalendarPage() {
             <RefreshCw size={40} color="#007AFF" style={{ animation: 'spin 1s linear infinite' }} />
           </div>
         ) : (
-          <div style={{ backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.5)', padding: '2rem', backdropFilter: 'blur(20px)', animation: 'slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
+          <div style={{ backgroundColor: isDark ? 'rgba(25, 28, 50, 0.8)' : 'rgba(255,255,255,0.7)', borderRadius: '20px', border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.5)', padding: '2rem', backdropFilter: 'blur(20px)', animation: 'slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
             {/* Month Navigation */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
               <button onClick={handlePrevMonth} style={{ padding: '0.5rem 1rem', backgroundColor: 'rgba(0, 122, 255, 0.1)', border: '1px solid #007AFF', borderRadius: '10px', color: '#007AFF', cursor: 'pointer', fontWeight: '600', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onMouseEnter={(e) => {
@@ -165,7 +201,7 @@ export default function CalendarPage() {
               }}>
                 ← Previous
               </button>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: '#000' }}>{monthName}</h2>
+              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: isDark ? '#fff' : '#000' }}>{monthName}</h2>
               <button onClick={handleNextMonth} style={{ padding: '0.5rem 1rem', backgroundColor: 'rgba(0, 122, 255, 0.1)', border: '1px solid #007AFF', borderRadius: '10px', color: '#007AFF', cursor: 'pointer', fontWeight: '600', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
                 e.currentTarget.style.transform = 'translateY(-2px)';
@@ -197,8 +233,8 @@ export default function CalendarPage() {
                     key={i}
                     style={{
                       padding: '0.75rem',
-                      backgroundColor: isToday ? 'rgba(0, 122, 255, 0.1)' : day ? 'rgba(0,0,0,0.02)' : 'transparent',
-                      border: isToday ? '2px solid #007AFF' : day ? '1px solid rgba(0,0,0,0.08)' : 'none',
+                      backgroundColor: isToday ? 'rgba(0, 122, 255, 0.1)' : day ? isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' : 'transparent',
+                      border: isToday ? '2px solid #007AFF' : day ? `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}` : 'none',
                       borderRadius: '12px',
                       minHeight: '100px',
                       display: 'flex',
@@ -213,13 +249,13 @@ export default function CalendarPage() {
                       }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = isToday ? 'rgba(0, 122, 255, 0.1)' : day ? 'rgba(0,0,0,0.02)' : 'transparent';
+                      e.currentTarget.style.backgroundColor = isToday ? 'rgba(0, 122, 255, 0.1)' : day ? isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' : 'transparent';
                       e.currentTarget.style.transform = 'translateY(0)';
                     }}
                   >
                     {day && (
                       <>
-                        <div style={{ fontWeight: isToday ? '700' : '600', marginBottom: '0.5rem', color: isToday ? '#007AFF' : '#000' }}>
+                        <div style={{ fontWeight: isToday ? '700' : '600', marginBottom: '0.5rem', color: isToday ? '#007AFF' : isDark ? '#fff' : '#000' }}>
                           {day} {isToday && '📍'}
                         </div>
                         <div style={{ flex: 1, overflow: 'auto', fontSize: '0.75rem' }}>
@@ -250,11 +286,11 @@ export default function CalendarPage() {
             </div>
 
             {/* Legend */}
-            <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-              <p style={{ fontSize: '0.875rem', opacity: 0.7, color: '#000' }}>
+            <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)' }}>
+              <p style={{ fontSize: '0.875rem', opacity: 0.7, color: isDark ? '#aaa' : '#000' }}>
                 Total tickets with updates: <span style={{ color: '#007AFF', fontWeight: '600' }}>{Object.values(ticketsByDate).flat().length}</span>
               </p>
-              <p style={{ fontSize: '0.75rem', opacity: 0.5, margin: '0.5rem 0 0 0', color: '#666' }}>
+              <p style={{ fontSize: '0.75rem', opacity: 0.5, margin: '0.5rem 0 0 0', color: isDark ? '#aaa' : '#666' }}>
                 📅 Tickets are grouped by their last updated date
               </p>
             </div>

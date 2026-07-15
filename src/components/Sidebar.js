@@ -8,10 +8,10 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
   const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', href: '/', emoji: '📊' },
-    { icon: CheckSquare, label: 'My Tickets', href: '/my-tickets', emoji: '✅' },
-    { icon: Search, label: 'Search', href: '/search', emoji: '🔍' },
-    { icon: Calendar, label: 'Calendar', href: '/calendar', emoji: '📅' }
+    { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
+    { icon: CheckSquare, label: 'My Tickets', href: '/my-tickets' },
+    { icon: Search, label: 'Search', href: '/search' },
+    { icon: Calendar, label: 'Calendar', href: '/calendar' }
   ];
 
   const isActive = (href) => {
@@ -82,7 +82,6 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
                 e.currentTarget.style.transform = 'translateX(0)';
               }}
             >
-              <span style={{ fontSize: '1.25rem' }}>{item.emoji}</span>
               <item.icon size={18} />
               <span>{item.label}</span>
             </a>
@@ -107,7 +106,6 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
             e.currentTarget.style.transform = 'translateY(0)';
             e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.04)';
           }}>
-            <span style={{ fontSize: '1rem' }}>🚀</span>
             <CheckSquare size={16} /> Bulk Close
           </button>
         </div>
@@ -133,7 +131,6 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
           onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
           onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
         >
-          <span style={{ fontSize: '1rem' }}>⚙️</span>
           <Settings size={18} />
           <span>Settings</span>
         </button>
@@ -156,7 +153,6 @@ export default function Sidebar({ onBulkCloseClick, onLogout }) {
           onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
           onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
         >
-          <span style={{ fontSize: '1rem' }}>👋</span>
           <LogOut size={18} />
           <span>Logout</span>
         </button>

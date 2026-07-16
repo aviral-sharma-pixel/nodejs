@@ -21,43 +21,48 @@ export default function Dashboard() {
   // Check authentication on mount
   useEffect(() => {
     const config = typeof window !== 'undefined' ? localStorage.getItem('jira_config') : null;
-    if (config) {
-      try {
-        setJiraConfig(JSON.parse(config));
-      } catch (e) {
+    const savedSettings = typeof window !== 'undefined' ? localStorage.getItem('app_settings') : null;
+
+    const timer = setTimeout(() => {
+      if (config) {
+        try {
+          setJiraConfig(JSON.parse(config));
+        } catch (e) {
+          router.push('/login');
+        }
+      } else {
         router.push('/login');
       }
-    } else {
-      router.push('/login');
-    }
 
-    // Load settings and apply theme
-    const savedSettings = typeof window !== 'undefined' ? localStorage.getItem('app_settings') : null;
-    if (savedSettings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings);
-        setSettings(parsedSettings);
-        const dark = parsedSettings.theme === 'dark';
-        setIsDark(dark);
-        if (dark) {
-          document.documentElement.style.backgroundColor = '#0a0e27';
-          document.body.style.backgroundColor = '#0a0e27';
-        } else {
-          document.documentElement.style.backgroundColor = '#f5f5f7';
-          document.body.style.backgroundColor = '#f5f5f7';
+      // Load settings and apply theme
+      if (savedSettings) {
+        try {
+          const parsedSettings = JSON.parse(savedSettings);
+          setSettings(parsedSettings);
+          const dark = parsedSettings.theme === 'dark';
+          setIsDark(dark);
+          if (dark) {
+            document.documentElement.style.backgroundColor = '#0a0e27';
+            document.body.style.backgroundColor = '#0a0e27';
+          } else {
+            document.documentElement.style.backgroundColor = '#f5f5f7';
+            document.body.style.backgroundColor = '#f5f5f7';
+          }
+        } catch (e) {
+          console.log('Failed to load settings');
+          setSettings({ theme: 'light', autoRefreshInterval: 30 });
         }
-      } catch (e) {
-        console.log('Failed to load settings');
+      } else {
         setSettings({ theme: 'light', autoRefreshInterval: 30 });
       }
-    } else {
-      setSettings({ theme: 'light', autoRefreshInterval: 30 });
-    }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [router]);
 
   const fetchTickets = async () => {
     if (!jiraConfig) return;
-    
+
     setLoading(true);
     setError(null);
     try {
@@ -86,7 +91,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (jiraConfig) {
-      fetchTickets();
+      const timer = setTimeout(() => {
+        fetchTickets();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [jiraConfig]);
 
@@ -117,7 +125,7 @@ export default function Dashboard() {
   const stats = useMemo(() => {
     // Only count open tickets (exclude done status)
     const openTickets = tickets.filter(t => !t.fields.status.name.toLowerCase().includes('done'));
-    
+
     return {
       open: openTickets.length,
       highPriority: openTickets.filter(t => t.fields.priority?.name === 'Highest' || t.fields.priority?.name === 'High').length,
@@ -159,13 +167,13 @@ export default function Dashboard() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: isDark ? '#0a0e27' : '#f5f5f7' }}>
-      <Sidebar onBulkCloseClick={() => setShowBulkCloseModal(true)} onLogout={handleLogout} />
-      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: isDark ? '#0f1729' : '#f5f5f7' }}>
+      <Sidebar onBulkCloseClick={() => setShowBulkCloseModal(true)} onLogout={handleLogout} isDark={isDark} />
+      <main style={{ marginLeft: '260px', flex: 1, padding: '2rem', overflow: 'auto', backgroundColor: isDark ? '#0f1729' : '#f5f5f7' }}>
         {/* Top Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', animation: 'fadeIn 0.4s ease-out' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', animation: 'fadeIn 0.4s ease-out' }}>
           <div>
-            <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', color: isDark ? '#fff' : '#000' }}>Good Morning 👋</h1>
-            <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem', color: isDark ? '#aaa' : '#666' }}>Here's what's happening with your tickets today</p>
+            <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: '700', color: isDark ? '#fff' : '#000' }}>Jira Workspace 🚀👋</h1>
+            <p style={{ margin: '0.25rem 0 0 0', opacity: 0.6, fontSize: '0.85rem', color: isDark ? '#aaa' : '#666' }}>Here&apos;s what&apos;s happening close your tickets today</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <button onClick={fetchTickets} disabled={loading} style={{ padding: '0.75rem 1.5rem', backgroundColor: 'var(--primary)', border: 'none', borderRadius: '12px', color: 'white', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 15px rgba(0, 122, 255, 0.3)', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)', opacity: loading ? 0.7 : 1 }} onMouseEnter={(e) => {
@@ -213,7 +221,7 @@ export default function Dashboard() {
 
         {/* Summary Cards */}
         {!loading && !error && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
             {[
               { label: 'Open Tickets', value: stats.open, color: '#007AFF', note: '📈 2 new today' },
               { label: 'High Priority', value: stats.highPriority, color: '#FF3B30', note: '🔴 Requires action' },
@@ -223,30 +231,30 @@ export default function Dashboard() {
               <div key={i} style={{
                 backgroundColor: isDark ? 'rgba(25, 28, 50, 0.8)' : 'rgba(255, 255, 255, 0.7)',
                 backdropFilter: 'blur(20px)',
-                borderRadius: '20px',
-                padding: '1.5rem',
+                borderRadius: '16px',
+                padding: '1.25rem',
                 border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.5)',
-                borderLeft: `5px solid ${card.color}`,
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.04)',
+                borderLeft: `4px solid ${card.color}`,
+                boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
                 transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
                 animation: `slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) ${i * 0.1}s backwards`,
                 cursor: 'pointer',
                 position: 'relative',
                 overflow: 'hidden'
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)';
-                e.currentTarget.style.transform = 'translateY(-8px)';
-                e.currentTarget.style.boxShadow = `0 16px 48px rgba(0, 0, 0, 0.1)`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.5)';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.04)';
-              }}>
-                <p style={{ margin: 0, opacity: 0.7, fontSize: '0.85rem', fontWeight: '600', color: isDark ? '#aaa' : '#666' }}>{card.label}</p>
-                <h3 style={{ margin: '0.75rem 0 0 0', fontSize: '2.75rem', fontWeight: '700', color: card.color }}>{card.value}</h3>
-                <p style={{ margin: '0.75rem 0 0 0', fontSize: '0.75rem', opacity: 0.5, color: isDark ? '#aaa' : '#666' }}>{card.note}</p>
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.7)';
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = `0 12px 32px rgba(0, 0, 0, 0.08)`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.5)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.04)';
+                }}>
+                <p style={{ margin: 0, opacity: 0.7, fontSize: '0.8rem', fontWeight: '600', color: isDark ? '#aaa' : '#666' }}>{card.label}</p>
+                <h3 style={{ margin: '0.5rem 0 0 0', fontSize: '2rem', fontWeight: '700', color: card.color }}>{card.value}</h3>
+                <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.7rem', opacity: 0.5, color: isDark ? '#aaa' : '#666' }}>{card.note}</p>
               </div>
             ))}
           </div>
@@ -254,13 +262,13 @@ export default function Dashboard() {
 
         {/* Search Bar */}
         {!loading && !error && tickets.length > 0 && (
-          <div style={{ marginBottom: '2rem', animation: 'slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
-            <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
-              <Search size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, pointerEvents: 'none', color: isDark ? '#aaa' : '#666' }} />
-              <input type="text" placeholder="Search tickets by ID, summary..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.875rem 1.25rem 0.875rem 3rem', borderRadius: '12px', border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e5e5ea'}`, backgroundColor: isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)', color: isDark ? '#fff' : '#000', fontSize: '0.95rem', boxSizing: 'border-box', backdropFilter: 'blur(8px)', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onFocus={(e) => {
+          <div style={{ marginBottom: '1.5rem', animation: 'slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
+            <div style={{ position: 'relative', marginBottom: '1rem' }}>
+              <Search size={16} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, pointerEvents: 'none', color: isDark ? '#aaa' : '#666' }} />
+              <input type="text" placeholder="Search tickets by ID, summary..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ width: '100%', padding: '0.625rem 1rem 0.625rem 2.5rem', borderRadius: '10px', border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e5e5ea'}`, backgroundColor: isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)', color: isDark ? '#fff' : '#000', fontSize: '0.85rem', boxSizing: 'border-box', backdropFilter: 'blur(8px)', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onFocus={(e) => {
                 e.currentTarget.style.borderColor = '#007AFF';
                 e.currentTarget.style.backgroundColor = isDark ? 'rgba(25, 28, 50, 0.8)' : 'rgba(255,255,255,0.95)';
-                e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0, 122, 255, 0.1)';
+                e.currentTarget.style.boxShadow = '0 0 0 2px rgba(0, 122, 255, 0.1)';
               }} onBlur={(e) => {
                 e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : '#e5e5ea';
                 e.currentTarget.style.backgroundColor = isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)';
@@ -268,8 +276,8 @@ export default function Dashboard() {
               }} />
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 {[
                   { id: 'all', label: 'All' },
                   { id: 'to-do', label: 'To Do' },
@@ -279,57 +287,57 @@ export default function Dashboard() {
                   { id: 'highest', label: 'Highest Priority' }
                 ].map(filter => (
                   <button key={filter.id} onClick={() => setSelectedFilter(filter.id)} style={{
-                    padding: '0.625rem 1.125rem',
-                    borderRadius: '12px',
-                    border: selectedFilter === filter.id ? '2px solid #007AFF' : `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e5e5ea'}`,
+                    padding: '0.5rem 0.875rem',
+                    borderRadius: '10px',
+                    border: selectedFilter === filter.id ? '1px solid #007AFF' : `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : '#e5e5ea'}`,
                     backgroundColor: selectedFilter === filter.id ? 'rgba(0, 122, 255, 0.1)' : isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)',
                     color: selectedFilter === filter.id ? '#007AFF' : isDark ? '#fff' : '#000',
                     cursor: 'pointer',
-                    fontSize: '0.875rem',
+                    fontSize: '0.8rem',
                     fontWeight: selectedFilter === filter.id ? '600' : '500',
                     transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
                     position: 'relative',
                     overflow: 'hidden',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
                   }}
-                  onMouseEnter={(e) => {
-                    if (selectedFilter !== filter.id) {
-                      e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.95)';
-                      e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.2)' : '#d0d0d5';
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = selectedFilter === filter.id ? 'rgba(0, 122, 255, 0.1)' : isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)';
-                    e.currentTarget.style.borderColor = selectedFilter === filter.id ? '2px solid #007AFF' : isDark ? 'rgba(255,255,255,0.1)' : '1px solid #e5e5ea';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}>
+                    onMouseEnter={(e) => {
+                      if (selectedFilter !== filter.id) {
+                        e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.95)';
+                        e.currentTarget.style.borderColor = isDark ? 'rgba(255,255,255,0.2)' : '#d0d0d5';
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = selectedFilter === filter.id ? 'rgba(0, 122, 255, 0.1)' : isDark ? 'rgba(25, 28, 50, 0.5)' : 'rgba(255,255,255,0.8)';
+                      e.currentTarget.style.borderColor = selectedFilter === filter.id ? '2px solid #007AFF' : isDark ? 'rgba(255,255,255,0.1)' : '1px solid #e5e5ea';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}>
                     {filter.label}
                   </button>
                 ))}
               </div>
               {selectedFilter === 'in-progress' && (
                 <button onClick={() => setShowBulkCloseModal(true)} style={{
-                  padding: '0.625rem 1.125rem',
-                  borderRadius: '12px',
+                  padding: '0.5rem 0.875rem',
+                  borderRadius: '10px',
                   border: '1px solid #007AFF',
                   backgroundColor: 'rgba(0, 122, 255, 0.15)',
                   color: '#007AFF',
                   cursor: 'pointer',
-                  fontSize: '0.875rem',
+                  fontSize: '0.8rem',
                   fontWeight: '600',
                   transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
                   boxShadow: '0 2px 8px rgba(0, 122, 255, 0.1)',
                   whiteSpace: 'nowrap'
                 }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.25)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}>
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.25)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}>
                   ✓ Select All
                 </button>
               )}
@@ -360,7 +368,7 @@ export default function Dashboard() {
           </div>
         )}
       </main>
-      
+
       <BulkCloseModal
         isOpen={showBulkCloseModal}
         tickets={tickets}

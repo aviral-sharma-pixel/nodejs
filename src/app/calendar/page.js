@@ -1,310 +1,210 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
-import BulkCloseModal from '@/components/BulkCloseModal';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { RefreshCw, Calendar as CalendarIcon, Clock, AlertCircle } from 'lucide-react';
 
 export default function CalendarPage() {
   const router = useRouter();
+  const [isDark, setIsDark] = useState(false);
+  const [date, setDate] = useState(new Date());
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [jiraConfig, setJiraConfig] = useState(null);
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [showBulkCloseModal, setShowBulkCloseModal] = useState(false);
-  const [settings, setSettings] = useState(null);
-  const [isDark, setIsDark] = useState(false);
 
-  // Check authentication on mount
   useEffect(() => {
-    const config = typeof window !== 'undefined' ? localStorage.getItem('jira_config') : null;
-    if (config) {
-      try {
-        setJiraConfig(JSON.parse(config));
-      } catch (e) {
-        router.push('/login');
-      }
-    } else {
-      router.push('/login');
-    }
+    if (typeof window === 'undefined') return;
+    const config = localStorage.getItem('jira_config');
+    if (!config) { router.push('/login'); return; }
 
-    // Load settings and apply theme
-    const savedSettings = typeof window !== 'undefined' ? localStorage.getItem('app_settings') : null;
-    if (savedSettings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings);
-        setSettings(parsedSettings);
-        const dark = parsedSettings.theme === 'dark';
-        setIsDark(dark);
-        if (dark) {
-          document.documentElement.style.backgroundColor = '#0a0e27';
-          document.body.style.backgroundColor = '#0a0e27';
-        } else {
-          document.documentElement.style.backgroundColor = '#f5f5f7';
-          document.body.style.backgroundColor = '#f5f5f7';
-        }
-      } catch (e) {
-        console.log('Failed to load settings');
-        setSettings({ theme: 'light', autoRefreshInterval: 30 });
+    const saved = localStorage.getItem('app_settings');
+    const timer = setTimeout(() => {
+      try { setJiraConfig(JSON.parse(config)); } catch { router.push('/login'); }
+      if (saved) {
+        try {
+          const { theme } = JSON.parse(saved);
+          const dark = theme === 'dark';
+          setIsDark(dark);
+          document.documentElement.style.backgroundColor = dark ? '#0a0e27' : '#f5f5f7';
+          document.body.style.backgroundColor = dark ? '#0a0e27' : '#f5f5f7';
+        } catch (_) {}
       }
-    } else {
-      setSettings({ theme: 'light', autoRefreshInterval: 30 });
-    }
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, [router]);
 
   const fetchTickets = async () => {
     if (!jiraConfig) return;
-    
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch('/api/tickets', {
-        signal: controller.signal,
-        headers: {
-          'x-jira-config': JSON.stringify(jiraConfig)
-        }
-      });
+      const res = await fetch('/api/tickets', { signal: controller.signal, headers: { 'x-jira-config': JSON.stringify(jiraConfig) } });
       clearTimeout(timeoutId);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to fetch tickets');
       setTickets(data.issues || []);
     } catch (err) {
-      if (err.name === 'AbortError') {
-        setError('Request timed out. Please try again.');
-      } else {
-        setError(err.message);
-      }
-    } finally {
-      setLoading(false);
-    }
+      setError(err.name === 'AbortError' ? 'Request timed out.' : err.message);
+    } finally { setLoading(false); }
   };
 
   useEffect(() => {
     if (jiraConfig) {
-      fetchTickets();
+      const timer = setTimeout(() => {
+        fetchTickets();
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [jiraConfig]);
 
-  // Auto-refresh effect
-  useEffect(() => {
-    if (!jiraConfig || !settings) return;
-
-    const interval = setInterval(() => {
-      fetchTickets();
-    }, settings.autoRefreshInterval * 1000);
-
-    return () => clearInterval(interval);
-  }, [jiraConfig, settings?.autoRefreshInterval]);
-
-  const handleLogout = () => {
-    localStorage.removeItem('jira_config');
-    router.push('/login');
-  };
-
-  const handleBulkCloseConfirm = (selectedKeys) => {
-    setTickets(tickets.filter(t => !selectedKeys.includes(t.key)));
-  };
-
-  // Group tickets by date (using local timezone, not UTC)
+  // Group tickets by date (using created date as fallback, duedate if available)
   const ticketsByDate = useMemo(() => {
-    const grouped = {};
-    tickets.forEach(ticket => {
-      const updatedDate = ticket.fields.updated;
-      if (updatedDate) {
-        // Convert UTC date to local date
-        const date = new Date(updatedDate);
-        const localDateKey = date.toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD format in local timezone
-        if (!grouped[localDateKey]) {
-          grouped[localDateKey] = [];
-        }
-        grouped[localDateKey].push(ticket);
-      }
+    const map = {};
+    tickets.forEach(t => {
+      const targetDate = t.fields.duedate ? new Date(t.fields.duedate) : new Date(t.fields.created);
+      const key = `${targetDate.getFullYear()}-${targetDate.getMonth()}-${targetDate.getDate()}`;
+      if (!map[key]) map[key] = [];
+      map[key].push(t);
     });
-    return grouped;
+    return map;
   }, [tickets]);
 
-  const getDaysInMonth = (date) => {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  };
+  const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+  const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  const daysInMonth = endOfMonth.getDate();
+  const startDay = startOfMonth.getDay(); // 0=Sun
 
-  const getFirstDayOfMonth = (date) => {
-    return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-  };
-
-  const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  const daysInMonth = getDaysInMonth(currentDate);
-  const firstDay = getFirstDayOfMonth(currentDate);
-  const days = [];
-
-  for (let i = 0; i < firstDay; i++) {
-    days.push(null);
+  const weeks = [];
+  let currentDay = 1 - startDay;
+  for (let w = 0; w < 6; w++) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      if (currentDay > 0 && currentDay <= daysInMonth) {
+        week.push(currentDay);
+      } else {
+        week.push(null);
+      }
+      currentDay++;
+    }
+    weeks.push(week);
   }
-  for (let i = 1; i <= daysInMonth; i++) {
-    days.push(i);
-  }
 
-  const handlePrevMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
-  };
+  const monthNames = [
+    'January','February','March','April','May','June','July','August','September','October','November','December'
+  ];
 
-  const handleNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
-  };
+  const handleLogout = () => { localStorage.removeItem('jira_config'); router.push('/login'); };
 
-  const getDateKey = (day) => {
-    if (!day) return null;
-    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-    // Format as YYYY-MM-DD in local timezone
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const dayStr = String(day).padStart(2, '0');
-    return `${year}-${month}-${dayStr}`;
+  const getStatusColor = (statusName) => {
+    if (!statusName) return '#FF3B30'; // red for open by default
+    const name = statusName.toLowerCase();
+    if (name.includes('done') || name.includes('closed') || name.includes('resolved')) {
+      return '#34C759'; // green for done
+    }
+    return '#FF3B30'; // red for anything else
   };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: isDark ? '#0a0e27' : '#f5f5f7' }}>
-      <Sidebar onBulkCloseClick={() => setShowBulkCloseModal(true)} onLogout={handleLogout} />
-      <main style={{ marginLeft: '280px', flex: 1, padding: '2.5rem', overflow: 'auto', backgroundColor: isDark ? '#0f1729' : '#f5f5f7' }}>
-        {/* Header */}
-        <div style={{ marginBottom: '2.5rem', animation: 'fadeIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
-          <h1 style={{ fontSize: '2.25rem', margin: 0, fontWeight: '700', color: isDark ? '#fff' : '#000' }}>Calendar 📅</h1>
-          <p style={{ margin: '0.5rem 0 0 0', opacity: 0.6, fontSize: '0.95rem', color: isDark ? '#aaa' : '#666' }}>View tickets grouped by activity date</p>
+      <Sidebar onLogout={handleLogout} isDark={isDark} />
+      <main style={{ marginLeft: '260px', flex: 1, padding: '2rem', overflow: 'auto', backgroundColor: isDark ? '#0f1729' : '#f5f5f7' }}>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', animation: 'fadeIn 0.4s' }}>
+          <div>
+            <h1 style={{ fontSize: '1.75rem', margin: 0, fontWeight: '700', color: isDark ? '#fff' : '#000' }}>Calendar 📅</h1>
+            <p style={{ marginTop: '0.25rem', opacity: 0.6, fontSize: '0.85rem', color: isDark ? '#aaa' : '#666' }}>{monthNames[date.getMonth()]} {date.getFullYear()} — Your upcoming events & due dates</p>
+          </div>
+          <button
+            onClick={fetchTickets}
+            disabled={loading}
+            style={{ padding: '0.625rem 1.25rem', backgroundColor: 'var(--primary)', border: 'none', borderRadius: '12px', color: 'white', fontWeight: '600', fontSize: '0.85rem', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 15px rgba(0,122,255,0.3)', transition: 'all 0.3s cubic-bezier(0.25,0.46,0.45,0.94)', opacity: loading ? 0.7 : 1 }}
+            onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,122,255,0.4)'; } }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,122,255,0.3)'; }}
+          >
+            <RefreshCw size={15} className={loading ? 'spin' : ''} />
+            Refresh
+          </button>
         </div>
 
         {error && (
-          <div style={{ padding: '1.5rem', backgroundColor: isDark ? 'rgba(255, 59, 48, 0.15)' : 'rgba(255, 59, 48, 0.1)', border: `1px solid ${isDark ? 'rgba(255, 59, 48, 0.4)' : 'rgba(255, 59, 48, 0.3)'}`, display: 'flex', alignItems: 'center', gap: '1rem', color: '#FF3B30', marginBottom: '2rem', borderRadius: '12px' }}>
-            <AlertCircle size={24} />
-            <div>
-              <h3 style={{ margin: 0, color: isDark ? '#ff7b72' : '#FF3B30' }}>Error Loading Tickets</h3>
-              <p style={{ margin: '0.25rem 0 0 0', opacity: 0.8, fontSize: '0.825rem' }}>{error}</p>
-            </div>
+          <div style={{ padding: '1rem 1.25rem', backgroundColor: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.1)', border: `1px solid ${isDark ? 'rgba(239,68,68,0.4)' : 'rgba(239,68,68,0.3)'}`, display: 'flex', alignItems: 'center', gap: '0.75rem', color: '#fca5a5', marginBottom: '1.5rem', borderRadius: '12px', fontSize: '0.875rem' }}>
+            <AlertCircle size={18} /> {error}
           </div>
         )}
 
-        {loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem 0' }}>
-            <RefreshCw size={40} color="#007AFF" style={{ animation: 'spin 1s linear infinite' }} />
-          </div>
-        ) : (
-          <div style={{ backgroundColor: isDark ? 'rgba(25, 28, 50, 0.8)' : 'rgba(255,255,255,0.7)', borderRadius: '20px', border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.5)', padding: '2rem', backdropFilter: 'blur(20px)', animation: 'slideInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}>
-            {/* Month Navigation */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-              <button onClick={handlePrevMonth} style={{ padding: '0.5rem 1rem', backgroundColor: 'rgba(0, 122, 255, 0.1)', border: '1px solid #007AFF', borderRadius: '10px', color: '#007AFF', cursor: 'pointer', fontWeight: '600', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }} onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}>
-                ← Previous
-              </button>
-              <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: '600', color: isDark ? '#fff' : '#000' }}>{monthName}</h2>
-              <button onClick={handleNextMonth} style={{ padding: '0.5rem 1rem', backgroundColor: 'rgba(0, 122, 255, 0.1)', border: '1px solid #007AFF', borderRadius: '10px', color: '#007AFF', cursor: 'pointer', fontWeight: '600', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }} onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.15)';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }} onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.1)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}>
-                Next →
-              </button>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '0.5rem', padding: '1.25rem', background: isDark ? 'rgba(25,28,50,0.8)' : 'rgba(255,255,255,0.7)', border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.5)', borderRadius: '16px', backdropFilter: 'blur(20px)', boxShadow: isDark ? 'none' : '0 4px 20px rgba(0,0,0,0.04)', animation: 'slideInUp 0.4s' }}>
+          {/* Weekday Headers */}
+          {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
+            <div key={d} style={{ textAlign: 'center', fontWeight: '700', fontSize: '0.8rem', color: isDark ? '#aaa' : '#666', paddingBottom: '0.5rem', borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}`, marginBottom: '0.5rem' }}>
+              {d}
             </div>
+          ))}
 
-            {/* Calendar Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '0.5rem' }}>
-              {/* Weekday headers */}
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} style={{ textAlign: 'center', fontWeight: '600', color: '#007AFF', paddingBottom: '0.75rem', fontSize: '0.875rem' }}>
-                  {day}
-                </div>
-              ))}
+          {/* Calendar Grid */}
+          {weeks.map((week, wi) =>
+            week.map((day, di) => {
+              const isToday = day === new Date().getDate() && date.getMonth() === new Date().getMonth() && date.getFullYear() === new Date().getFullYear();
+              const dateKey = `${date.getFullYear()}-${date.getMonth()}-${day}`;
+              const dayTickets = day ? (ticketsByDate[dateKey] || []) : [];
 
-              {/* Calendar days */}
-              {days.map((day, i) => {
-                const dateKey = day ? getDateKey(day) : null;
-                const dayTickets = day && ticketsByDate[dateKey] ? ticketsByDate[dateKey] : [];
-                const isToday = day && dateKey === new Date().toLocaleDateString('en-CA');
-                
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      padding: '0.75rem',
-                      backgroundColor: isToday ? 'rgba(0, 122, 255, 0.1)' : day ? isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' : 'transparent',
-                      border: isToday ? '2px solid #007AFF' : day ? `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}` : 'none',
-                      borderRadius: '12px',
-                      minHeight: '100px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                      cursor: day ? 'pointer' : 'default'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (day) {
-                        e.currentTarget.style.backgroundColor = 'rgba(0, 122, 255, 0.05)';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = isToday ? 'rgba(0, 122, 255, 0.1)' : day ? isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)' : 'transparent';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    {day && (
-                      <>
-                        <div style={{ fontWeight: isToday ? '700' : '600', marginBottom: '0.5rem', color: isToday ? '#007AFF' : isDark ? '#fff' : '#000' }}>
-                          {day} {isToday && '📍'}
+              return (
+                <div key={`${wi}-${di}`} style={{ 
+                  minHeight: '110px', 
+                  borderRadius: '12px', 
+                  padding: '0.5rem',
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  background: day ? (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)') : 'transparent', 
+                  border: isToday ? '1px solid #007AFF' : `1px solid ${day ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)') : 'transparent'}`,
+                  transition: 'background 0.2s',
+                }}>
+                  {day && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: isToday ? '700' : '600', color: isToday ? '#007AFF' : (isDark ? '#fff' : '#000'), width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', backgroundColor: isToday ? 'rgba(0,122,255,0.1)' : 'transparent' }}>
+                        {day}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Tickets for this day */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', overflowY: 'auto', flex: 1 }}>
+                    {dayTickets.map(t => {
+                      const statusColor = getStatusColor(t.fields.status?.name);
+                      return (
+                        <div key={t.key} title={`${t.fields.summary} (${t.fields.status?.name})`} style={{
+                          padding: '0.25rem 0.4rem',
+                          borderRadius: '6px',
+                          backgroundColor: `${statusColor}15`,
+                          border: `1px solid ${statusColor}30`,
+                          fontSize: '0.7rem',
+                          fontWeight: '600',
+                          color: isDark ? '#e2e8f0' : '#334155',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.25rem'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = `${statusColor}25`; }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = `${statusColor}15`; }}
+                        >
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: statusColor, flexShrink: 0 }} />
+                          {t.key}
                         </div>
-                        <div style={{ flex: 1, overflow: 'auto', fontSize: '0.75rem' }}>
-                          {dayTickets.map((ticket, idx) => (
-                            <div
-                              key={idx}
-                              style={{
-                                padding: '0.35rem 0.5rem',
-                                backgroundColor: 'rgba(0, 122, 255, 0.1)',
-                                borderRadius: '4px',
-                                marginBottom: '0.25rem',
-                                color: '#007AFF',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis'
-                              }}
-                              title={ticket.key}
-                            >
-                              {ticket.key}
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
+                      )
+                    })}
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Legend */}
-            <div style={{ marginTop: '2rem', paddingTop: '2rem', borderTop: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(0,0,0,0.08)' }}>
-              <p style={{ fontSize: '0.875rem', opacity: 0.7, color: isDark ? '#aaa' : '#000' }}>
-                Total tickets with updates: <span style={{ color: '#007AFF', fontWeight: '600' }}>{Object.values(ticketsByDate).flat().length}</span>
-              </p>
-              <p style={{ fontSize: '0.75rem', opacity: 0.5, margin: '0.5rem 0 0 0', color: isDark ? '#aaa' : '#666' }}>
-                📅 Tickets are grouped by their last updated date
-              </p>
-            </div>
-          </div>
-        )}
+                </div>
+              );
+            })
+          )}
+        </div>
       </main>
-
-      <BulkCloseModal
-        isOpen={showBulkCloseModal}
-        tickets={tickets}
-        onClose={() => setShowBulkCloseModal(false)}
-        onConfirm={handleBulkCloseConfirm}
-        jiraConfig={jiraConfig}
-      />
     </div>
   );
 }

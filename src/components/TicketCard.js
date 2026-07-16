@@ -42,18 +42,25 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
   const isRecentlyClosed = ticket.fields.status.name.toLowerCase().includes('done');
   const statusColor = getStatusColor(ticket.fields.status.name);
 
-  const handleClose = () => {
-    // Check if this is a "Start" transition (CREATE TICKET → IN PROGRESS)
+  const handleClose = async () => {
     const currentStatus = ticket.fields.status.name.toLowerCase();
+    
+    // If already in progress, go straight to Done
+    if (currentStatus.includes('progress')) {
+      executeTransition('1h', true);
+      return;
+    }
+    
+    // If in CREATE/TO DO/BACKLOG, need estimate for Start transition
     if (currentStatus.includes('create') || currentStatus.includes('to do') || currentStatus.includes('backlog')) {
       setShowEstimateDialog(true);
     } else {
-      // For other transitions (IN PROGRESS → DONE), proceed directly
-      executeTransition('1h');
+      // For any other status, try to transition to Done
+      executeTransition('1h', true);
     }
   };
 
-  const executeTransition = async (estimateValue) => {
+  const executeTransition = async (estimateValue, skipDialog = false) => {
     setIsClosing(true);
     setError(null);
     try {
@@ -62,15 +69,23 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           estimate: estimateValue,
-          jiraConfig: jiraConfig
+          jiraConfig: jiraConfig,
+          isBulkClose: skipDialog // Use full close workflow if skipDialog is true
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to close');
       
       setShowEstimateDialog(false);
-      const currentStatus = ticket.fields.status.name.toLowerCase();
-      if (currentStatus.includes('progress') || currentStatus === 'in progress') {
+      
+      // Check if ticket is done
+      if (data.isDone) {
+        // Ticket is fully closed, trigger parent update
+        setTimeout(() => {
+          onStatusChange(ticket.key);
+        }, 500);
+      } else {
+        // Ticket is now In Progress, trigger update to show new status
         setTimeout(() => {
           onStatusChange(ticket.key);
         }, 500);
@@ -84,15 +99,15 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
 
   const handleConfirmEstimate = () => {
     if (estimate.trim()) {
-      executeTransition(estimate);
+      executeTransition(estimate, true); // true = full close workflow after start
     }
   };
 
   return (
-    <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', position: 'relative', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)', animation: 'fadeIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)', backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.5)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.04)' }} onMouseEnter={(e) => {
+    <div className="glass-panel" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', position: 'relative', overflow: 'hidden', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)', animation: 'fadeIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)', backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.5)', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.04)' }} onMouseEnter={(e) => {
       e.currentTarget.style.borderColor = 'rgba(0, 122, 255, 0.3)';
       e.currentTarget.style.boxShadow = '0 12px 48px rgba(0, 122, 255, 0.1)';
-      e.currentTarget.style.transform = 'translateY(-8px)';
+      e.currentTarget.style.transform = 'translateY(-4px)';
     }} onMouseLeave={(e) => {
       e.currentTarget.style.borderColor = 'rgba(255,255,255,0.5)';
       e.currentTarget.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.04)';
@@ -104,22 +119,22 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1 }}>
-          <span style={{ fontSize: '0.75rem', color: '#007AFF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{ticket.key}</span>
-          <h3 style={{ marginTop: '0.25rem', fontSize: '1.125rem', fontWeight: '600', margin: 0, color: '#000' }}>{ticket.fields.summary}</h3>
+          <span style={{ fontSize: '0.65rem', color: '#007AFF', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{ticket.key}</span>
+          <h3 style={{ marginTop: '0.15rem', fontSize: '0.9rem', fontWeight: '600', margin: 0, color: '#000' }}>{ticket.fields.summary}</h3>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: isStale ? '#FF9500' : '#666', opacity: isStale ? 1 : 0.6 }}>
-          <Clock size={14} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem', color: isStale ? '#FF9500' : '#666', opacity: isStale ? 1 : 0.6 }}>
+          <Clock size={12} />
           <span>{updatedDate.toLocaleDateString()}</span>
         </div>
       </div>
 
       {/* Priority and Status Badges */}
-      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
         <div style={{
-          padding: '0.375rem 0.75rem',
+          padding: '0.25rem 0.5rem',
           backgroundColor: `${getPriorityColor(ticket.fields.priority?.name)}20`,
           borderRadius: '4px',
-          fontSize: '0.75rem',
+          fontSize: '0.65rem',
           fontWeight: '600',
           color: getPriorityColor(ticket.fields.priority?.name),
           border: `1px solid ${getPriorityColor(ticket.fields.priority?.name)}40`
@@ -127,10 +142,10 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
           {getPriorityLabel(ticket.fields.priority?.name)}
         </div>
         <div style={{
-          padding: '0.375rem 0.75rem',
+          padding: '0.25rem 0.5rem',
           backgroundColor: statusColor.bg,
           borderRadius: '4px',
-          fontSize: '0.75rem',
+          fontSize: '0.65rem',
           fontWeight: '600',
           color: statusColor.color,
           border: `1px solid ${statusColor.color}40`
@@ -138,10 +153,10 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
           {statusColor.dot} {ticket.fields.status.name}
         </div>
         <div style={{
-          padding: '0.375rem 0.75rem',
+          padding: '0.25rem 0.5rem',
           backgroundColor: 'rgba(255,255,255,0.05)',
           borderRadius: '4px',
-          fontSize: '0.75rem',
+          fontSize: '0.65rem',
           fontWeight: '500',
           color: 'var(--foreground)',
           opacity: 0.7
@@ -151,21 +166,21 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
       </div>
 
       {error && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', fontSize: '0.875rem', marginTop: '0.5rem' }}>
-          <XCircle size={16} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444', fontSize: '0.8rem', marginTop: '0.5rem' }}>
+          <XCircle size={14} />
           <span>{error}</span>
         </div>
       )}
 
-      <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--card-border)' }}>
+      <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid var(--card-border)' }}>
         {isRecentlyClosed ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.75rem', backgroundColor: 'rgba(34, 197, 94, 0.1)', borderRadius: '6px', color: '#22c55e', fontWeight: '600', fontSize: '0.875rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', padding: '0.5rem', backgroundColor: 'rgba(34, 197, 94, 0.1)', borderRadius: '6px', color: '#22c55e', fontWeight: '600', fontSize: '0.75rem' }}>
             ✓ Completed
           </div>
         ) : showEstimateDialog ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '600', marginBottom: '0.5rem', color: '#000', opacity: 0.8 }}>
+              <label style={{ display: 'block', fontSize: '0.7rem', fontWeight: '600', marginBottom: '0.25rem', color: '#000', opacity: 0.8 }}>
                 Original Estimate
               </label>
               <input
@@ -176,14 +191,14 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
                 autoFocus
                 style={{
                   width: '100%',
-                  padding: '0.625rem',
-                  borderRadius: '12px',
+                  padding: '0.5rem',
+                  borderRadius: '8px',
                   border: '1px solid #e5e5ea',
                   backgroundColor: 'rgba(255,255,255,0.8)',
                   color: '#000',
                   boxSizing: 'border-box',
-                  fontSize: '0.875rem',
-                  marginBottom: '0.75rem',
+                  fontSize: '0.8rem',
+                  marginBottom: '0.5rem',
                   transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
                 }}
                 onFocus={(e) => {
@@ -195,14 +210,14 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               />
-              <p style={{ fontSize: '0.65rem', opacity: 0.6, margin: '0.5rem 0 0 0', color: '#666' }}>
+              <p style={{ fontSize: '0.6rem', opacity: 0.6, margin: '0', color: '#666' }}>
                 Format: 1h, 2d, 30m, 1.5h
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
               <button 
                 className="btn btn-primary" 
-                style={{ flex: 1, transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
+                style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
                 onClick={handleConfirmEstimate}
                 disabled={isClosing || !estimate.trim()}
                 onMouseEnter={(e) => {
@@ -218,7 +233,7 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
               </button>
               <button 
                 className="btn" 
-                style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.8)', color: '#000', border: '1px solid #e5e5ea', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
+                style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', backgroundColor: 'rgba(255,255,255,0.8)', color: '#000', border: '1px solid #e5e5ea', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
                 onClick={() => setShowEstimateDialog(false)}
                 disabled={isClosing}
                 onMouseEnter={(e) => {
@@ -239,7 +254,7 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
         ) : (
           <button 
             className="btn btn-primary" 
-            style={{ width: '100%', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
+            style={{ width: '100%', padding: '0.6rem', fontSize: '0.8rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem', transition: 'all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)' }}
             onClick={handleClose}
             disabled={isClosing}
             onMouseEnter={(e) => {
@@ -251,9 +266,9 @@ export default function TicketCard({ ticket, onStatusChange, jiraConfig }) {
               e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
-            {isClosing ? 'Progressing...' : (
+            {isClosing ? 'Closing...' : (
               <>
-                <CheckCircle2 size={18} />
+                <CheckCircle2 size={16} />
                 One-Click Close
               </>
             )}

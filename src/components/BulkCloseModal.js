@@ -9,8 +9,11 @@ export default function BulkCloseModal({ isOpen, tickets, onClose, onConfirm, ji
 
   useEffect(() => {
     if (isOpen) {
-      setSelectedTickets({});
-      setError(null);
+      const timer = setTimeout(() => {
+        setSelectedTickets({});
+        setError(null);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 

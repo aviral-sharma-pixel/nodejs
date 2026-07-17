@@ -1,0 +1,51 @@
+INFO:     Started server process [318113]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Attempting to connect to Gmail: aviral.sharma@girnarsoft.com
+✓ Connected to Gmail: aviral.sharma@girnarsoft.com
+Starting Gmail polling task...
+
+[POLL #1] Polling Gmail for new alerts... (tracking 0 emails)
+  [FETCH] Processing 6 labels: ['CPU', 'Memory', 'Disk', '5XX', 'Port', 'DB']
+  [FETCH] ✓ Selected label 'CPU'
+  [FETCH]   No unseen emails, fetching all...
+  [FETCH] 'CPU': 1254 total, 1254 new
+    [FETCH] Processed: [OK] cd-integration  CPU Usage alert
+              Category: CPU | Status: ok | Duration: 0min
+    [FETCH] Processed: [OK] cd-integration  CPU Usage alert
+              Category: CPU | Status: ok | Duration: 0min
+    [FETCH] Processed: [No Data] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: firing | Duration: 0min
+    [FETCH] Processed: [No Data] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: firing | Duration: 0min
+    [FETCH] Processed: [OK] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: ok | Duration: 0min
+    [FETCH] Processed: [OK] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: ok | Duration: 0min
+    [FETCH] Processed: [No Data] cd-integration  CPU Usage alert
+              Category: CPU | Status: firing | Duration: 0min
+    [FETCH] Processed: [No Data] cd-integration  CPU Usage alert
+              Category: CPU | Status: firing | Duration: 0min
+    [FETCH] Processed: [Alerting] cardekho_central_service CPU Alert aler
+              Category: CPU | Status: firing | Duration: 0min
+    [FETCH] Processed: [Alerting] cardekho_central_service CPU Alert aler
+              Category: CPU | Status: firing | Duration: 0min
+    [FETCH] Processed: [OK] cardekho_central_service CPU Alert alert
+              Category: CPU | Status: ok | Duration: 0min
+INFO:     127.0.0.1:60056 - "GET /health HTTP/1.1" 200 OK
+    [FETCH] Processed: [OK] cardekho_central_service CPU Alert alert
+              Category: CPU | Status: ok | Duration: 0min
+    [FETCH] Processed: [OK] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: ok | Duration: 0min
+    [FETCH] Processed: [OK] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: ok | Duration: 0min
+    [FETCH] Processed: [No Data] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: firing | Duration: 0min
+    [FETCH] Processed: [No Data] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: firing | Duration: 0min
+    [FETCH] Processed: [OK] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: ok | Duration: 0min
+    [FETCH] Processed: [OK] bikedekho-lms-Tvs_CPU usage > 80% alert
+              Category: CPU | Status: ok | Duration: 0min
+INFO:     127.0.0.1:60060 - "GET /api/alerts HTTP/1.1" 200 OK

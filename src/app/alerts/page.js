@@ -87,18 +87,11 @@ export default function AlertsPage() {
       const ws = new WebSocket(wsUrl);
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        if (data.type === 'new_alert') {
-          if ('Notification' in window && Notification.permission === 'granted')
-            new Notification('New Alert! 🚨', { body: data.alert.title });
+        // On any backend push, just re-fetch from the Next.js API to get correctly processed data
+        if (data.type === 'new_alerts' || data.type === 'new_alert') {
           fetchAlerts();
-        } else if (data.type === 'initial') {
-          setAlerts(data.alerts.map(a => ({
-            name: a.title, email: a.server, status: a.status,
-            alertType: a.category.toLowerCase(),
-            durationMinutes: calculateDurationMinutes(a.timestamp),
-            timestamp: a.timestamp, description: a.description, isOverdue: false
-          })));
         }
+        // Ignore 'initial' type — REST fetch on mount covers this
       };
       ws.onerror  = () => {};
       ws.onclose  = () => {};
@@ -114,12 +107,24 @@ export default function AlertsPage() {
 
   const handleLogout = () => { localStorage.removeItem('jira_config'); router.push('/login'); };
 
+  const acknowledgeAlert = async (id, e) => {
+    e.stopPropagation();
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      await fetch(`${backendUrl}/api/alerts/${encodeURIComponent(id)}/acknowledge`, { method: 'POST' });
+      setAlerts(alerts.filter(a => a.id !== id));
+    } catch (err) {
+      console.error('Failed to acknowledge:', err);
+    }
+  };
+
   const stats = useMemo(() => ({
     total:   alerts.length,
     firing:  alerts.filter(a => a.status === 'firing').length,
     ok:      alerts.filter(a => a.status === 'ok').length,
     overdue: alerts.filter(a => {
-      const threshold = a.alertType === 'url_alert' || a.alertType === 'port_alert' ? 5 : 90;
+      const cat = (a.alertType || '').toLowerCase();
+      const threshold = ['cpu', 'memory', 'disk', 'port', 'db'].includes(cat) ? 5 : 90;
       return a.status === 'firing' && a.durationMinutes >= threshold;
     }).length,
   }), [alerts]);
@@ -129,7 +134,8 @@ export default function AlertsPage() {
     if (selectedFilter === 'firing')  filtered = filtered.filter(a => a.status === 'firing');
     if (selectedFilter === 'ok')      filtered = filtered.filter(a => a.status === 'ok');
     if (selectedFilter === 'overdue') filtered = filtered.filter(a => {
-      const t = a.alertType === 'url_alert' || a.alertType === 'port_alert' ? 5 : 90;
+      const cat = (a.alertType || '').toLowerCase();
+      const t = ['cpu', 'memory', 'disk', 'port', 'db'].includes(cat) ? 5 : 90;
       return a.status === 'firing' && a.durationMinutes >= t;
     });
     if (searchQuery.trim()) {
@@ -271,16 +277,24 @@ export default function AlertsPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1rem' }}>
               {filteredAlerts.map((alert, idx) => {
-                const threshold = alert.alertType === 'url_alert' || alert.alertType === 'port_alert' ? 5 : 90;
+                const cat = (alert.alertType || '').toLowerCase();
+                const threshold = ['cpu', 'memory', 'disk', 'port', 'db'].includes(cat) ? 5 : 90;
                 const isOverdue = alert.status === 'firing' && alert.durationMinutes >= threshold;
                 const accentColor = isOverdue ? '#FF3B30' : getAlertTypeColor(alert.alertType);
 
                 return (
                   <div key={idx}
-                    style={{ backgroundColor: cardBg, backdropFilter: 'blur(20px)', borderRadius: '16px', padding: '1.25rem', border, borderLeft: `4px solid ${accentColor}`, boxShadow: '0 4px 20px rgba(0,0,0,0.04)', transition: 'all 0.3s cubic-bezier(0.25,0.46,0.45,0.94)', animation: `slideInUp 0.4s cubic-bezier(0.25,0.46,0.45,0.94) ${idx * 0.05}s backwards`, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+                    style={{ backgroundColor: cardBg, backdropFilter: 'blur(20px)', borderRadius: '16px', cursor: 'pointer', padding: '1.25rem', border, borderLeft: `4px solid ${accentColor}`, boxShadow: '0 4px 20px rgba(0,0,0,0.04)', transition: 'all 0.3s cubic-bezier(0.25,0.46,0.45,0.94)', animation: `slideInUp 0.4s cubic-bezier(0.25,0.46,0.45,0.94) ${idx * 0.05}s backwards`, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
                     onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(0,0,0,0.1)'; }}
                     onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.04)'; }}
+                    onClick={() => {
+                      if (alert.emailMessageId) {
+                        const url = `https://mail.google.com/mail/u/0/#search/rfc822msgid:${encodeURIComponent(alert.emailMessageId)}`;
+                        window.open(url, '_blank');
+                      }
+                    }}
                   >
+                  
                     {/* Overdue badge */}
                     {isOverdue && (
                       <div style={{ position: 'absolute', top: '1rem', right: '1rem', padding: '0.2rem 0.6rem', backgroundColor: 'rgba(255,59,48,0.15)', border: '1px solid rgba(255,59,48,0.4)', borderRadius: '6px', fontSize: '0.62rem', fontWeight: '700', color: '#FF3B30', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
@@ -309,14 +323,27 @@ export default function AlertsPage() {
                     </div>
 
                     {/* Footer */}
-                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.78rem', color: textMuted, paddingTop: '0.5rem', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                        <Clock size={13} />
-                        <span>{alert.durationMinutes} min</span>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.78rem', color: textMuted, paddingTop: '0.5rem', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}`, justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                          <Clock size={13} />
+                          <span>{alert.durationMinutes} min</span>
+                        </div>
+                        <div style={{ opacity: 0.5 }}>
+                          {alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : 'N/A'}
+                        </div>
                       </div>
-                      <div style={{ opacity: 0.5 }}>
-                        {alert.timestamp ? new Date(alert.timestamp).toLocaleTimeString() : 'N/A'}
-                      </div>
+                      {alert.id && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); acknowledgeAlert(alert.id, e); }}
+                          style={{ padding: '0.25rem 0.625rem', backgroundColor: 'rgba(0,122,255,0.1)', border: '1px solid rgba(0,122,255,0.3)', borderRadius: '6px', color: '#007AFF', fontSize: '0.7rem', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s', textTransform: 'uppercase' }}
+                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(0,122,255,0.2)'; e.currentTarget.style.transform = 'scale(1.05)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'rgba(0,122,255,0.1)'; e.currentTarget.style.transform = 'scale(1)'; }}
+                          title="Acknowledge and dismiss this alert"
+                        >
+                          ✓ Acknowledge
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

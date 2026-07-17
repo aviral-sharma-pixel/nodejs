@@ -3,8 +3,9 @@ import asyncio
 import imaplib
 import email
 from email.header import decode_header
-from datetime import datetime
-from typing import Optional, List
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict
 from pydantic import BaseModel
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,10 +13,8 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 import json
-import threading
 
-# Load .env.local from root directory
-import sys
+# Load environment
 from pathlib import Path
 root_dir = Path(__file__).parent.parent
 load_dotenv(root_dir / '.env.local')
@@ -24,24 +23,21 @@ load_dotenv(root_dir / '.env.local')
 class Alert(BaseModel):
     id: str
     title: str
-    severity: str
     category: str
     server: str
     status: str
     timestamp: str
     description: str
-    raw_email: str
+    firstSeenAt: str
+    durationMinutes: int = 0
+    emailMessageId: str | None = None
 
-# Gmail labels to monitor
-GMAIL_LABELS = ["CPU", "Memory", "Disk", "5XX"]
+# Gmail labels to monitor (case sensitive based on user's Gmail labels)
+GMAIL_LABELS = ["CPU", "Memory", "Disk", "5XX", "ports", "db"]
 
-# Alert ID counter for uniqueness
-alert_id_counter = 0
-
-# In-memory alert storage with timestamp tracking
-alerts_store = {}  # {alert_id: Alert}
-seen_email_ids = set()  # Track which emails we've already processed
-latest_alert: Optional[Alert] = None
+# Storage
+alerts_store: Dict[str, Alert] = {}
+seen_email_ids: set = set()
 active_connections: List[WebSocket] = []
 
 class GmailService:
@@ -49,27 +45,16 @@ class GmailService:
         self.email_addr = email_addr
         self.app_password = app_password
         self.imap = None
-        
+    
     def connect(self):
         try:
-            print(f"Attempting to connect to Gmail: {self.email_addr}")
+            print(f"Connecting to Gmail: {self.email_addr}")
             self.imap = imaplib.IMAP4_SSL("imap.gmail.com", 993, timeout=30)
             self.imap.login(self.email_addr, self.app_password)
-            print(f"✓ Connected to Gmail: {self.email_addr}")
+            print(f"✓ Gmail connected")
             return True
-        except imaplib.IMAP4.error as e:
-            print(f"Gmail IMAP error: {e}")
-            print(f"Possible causes:")
-            print(f"  - App password may be incorrect")
-            print(f"  - Gmail account may not have IMAP enabled")
-            print(f"  - 2FA not enabled on account")
-            print(f"  - Network/firewall blocking Gmail")
-            return False
         except Exception as e:
-            print(f"Gmail connection error: {type(e).__name__}: {e}")
-            print(f"Email: {self.email_addr}")
-            import traceback
-            traceback.print_exc()
+            print(f"✗ Gmail connection failed: {e}")
             return False
     
     def disconnect(self):
@@ -85,26 +70,20 @@ class GmailService:
         
         subject = ""
         if "Subject" in msg:
-            decoded_subject = decode_header(msg["Subject"])
-            subject = "".join([text.decode(charset) if isinstance(text, bytes) else text 
-                              for text, charset in decoded_subject])
+            decoded = decode_header(msg["Subject"])
+            subject = "".join([text.decode(charset) if isinstance(text, bytes) else text for text, charset in decoded])
         
-        from_addr = msg.get("From", "unknown")
         date_str = msg.get("Date", datetime.now().isoformat())
         
         body = ""
-        html_body = ""
-        
         if msg.is_multipart():
             for part in msg.walk():
-                content_type = part.get_content_type()
-                try:
-                    if content_type == "text/plain":
+                if part.get_content_type() == "text/plain":
+                    try:
                         body = part.get_payload(decode=True).decode()
-                    elif content_type == "text/html":
-                        html_body = part.get_payload(decode=True).decode()
-                except:
-                    pass
+                        break
+                    except:
+                        pass
         else:
             try:
                 body = msg.get_payload(decode=True).decode()
@@ -113,200 +92,224 @@ class GmailService:
         
         return {
             "subject": subject,
-            "from": from_addr,
             "date": date_str,
             "body": body,
-            "html": html_body,
-            "raw": email_data.decode(errors='ignore')
+            "message_id": msg.get('Message-ID')
         }
     
-    def extract_alert_info(self, parsed_email: dict, label: str = None) -> Alert:
-        subject = parsed_email["subject"].lower()
-        body = (parsed_email["body"] + " " + parsed_email["html"]).lower()
-        
-        # Determine severity
-        severity = "info"
-        if "critical" in subject or "error" in subject or "failed" in subject:
-            severity = "critical"
-        elif "warning" in subject or "alert" in subject:
-            severity = "warning"
-        
-        # Use the Gmail label as category, fallback to parsing subject
-        category = label if label else "general"
-        if not label:
-            for label_name in GMAIL_LABELS:
-                if label_name.lower() in subject:
-                    category = label_name
-                    break
-        
-        # Extract server info from subject (often has server name)
-        server = "unknown"
-        subject_parts = subject.split()
-        for i, part in enumerate(subject_parts):
-            if "server" in part.lower() and i + 1 < len(subject_parts):
-                server = subject_parts[i + 1]
-                break
-        
-        # If server not found in subject, try body
-        if server == "unknown" and "server" in body:
-            parts = body.split("server")
-            if len(parts) > 1:
-                server_part = parts[1].split()[0:2]
-                server = " ".join(server_part)
-        
-        # Determine status based on subject keywords
-        status = "firing"
-        if "resolved" in subject or "ok" in subject or "healthy" in subject:
-            status = "ok"
-        
-        global alert_id_counter
-        alert_id_counter += 1
-        alert_id = f"{int(datetime.now().timestamp())}_{alert_id_counter}"
-        
+    def extract_alert(self, parsed: dict, label: str) -> Alert:
+        raw_subject = parsed["subject"]  # preserve original case
+        subject_lower = raw_subject.lower()
+        body = parsed["body"].lower()
+
+        # ── 1. Extract status from bracket prefix e.g. "[ok]", "[alerting]", "[no data]" ──
+        import re
+        bracket_match = re.match(r'^\[([^\]]+)\]\s*', raw_subject)
+        if bracket_match:
+            tag = bracket_match.group(1).lower()
+            if tag in ('ok', 'resolved', 'healthy', 'normal'):
+                status = 'ok'
+            else:
+                # alerting, firing, no data, critical, warning → all fire
+                status = 'firing'
+            # Strip the bracket prefix from the title
+            clean_title = raw_subject[bracket_match.end():].strip()
+        else:
+            # Fallback: scan for keywords
+            status = 'ok' if any(x in subject_lower for x in ['resolved', ' ok ', 'healthy']) else 'firing'
+            clean_title = raw_subject.strip()
+
+        # ── 2. Use label as category ──
+        category = label
+
+        # ── 3. Extract server/host from subject (Grafana usually puts hostname in subject) ──
+        server = 'unknown'
+        # Try common Grafana patterns: "hostname_alert_name" or "hostname  alert_name"
+        parts = clean_title.split()
+        if parts:
+            # First word is often the server/host identifier
+            first_word = parts[0]
+            if '_' in first_word:
+                server = first_word.split('_')[0]  # e.g. "crm-bikedekho" from "crm-bikedekho_cpu"
+            elif '-' in first_word and len(parts) > 1:
+                server = first_word  # e.g. "cd-integration"
+            elif len(first_word) > 3:
+                server = first_word
+
+        # ── 4. Deterministic logical ID (Category + Server + Title) to correlate firing and ok emails ──
+        import hashlib
+        safe_title = clean_title[:50].strip().replace(' ', '_').replace('/', '_').replace('\\', '_')
+        safe_server = server.replace('/', '_').replace('\\', '_')
+        alert_id = f"{label}_{safe_server}_{safe_title}"
+
+        # ── 5. firstSeenAt = NOW (when we ingested it), NOT the email send date ──
+        first_seen_at = datetime.now().isoformat()
+
         return Alert(
             id=alert_id,
-            title=parsed_email["subject"],
-            severity=severity,
+            title=clean_title[:150],
             category=category,
             server=server,
             status=status,
-            timestamp=parsed_email["date"],
-            description=parsed_email["body"][:200],
-            raw_email=parsed_email["raw"][:500]
+            timestamp=parsed["date"],   # original email date (for display)
+            description=body[:300],
+            firstSeenAt=first_seen_at,  # when WE ingested it
+            durationMinutes=0,
+            emailMessageId=parsed.get('message_id')
         )
     
-    def fetch_unread_emails(self, max_emails_per_label=20) -> List[Alert]:
-        """Fetch unread emails from Gmail labels. Limit to max_emails_per_label per label to avoid timeout."""
+    def fetch_alerts(self, limit_per_label=500) -> List[Alert]:
+        """Fetch new alerts from Gmail"""
         global seen_email_ids
         alerts = []
+        
         try:
-            # Reconnect if connection is lost
+            # Test connection
             try:
-                if self.imap:
-                    # Test if connection is still alive
-                    status, _ = self.imap.status("INBOX", "(MESSAGES)")
-                    if status != "OK":
-                        raise Exception("Connection test failed")
+                self.imap.status("INBOX", "(MESSAGES)")
             except:
-                print("IMAP connection lost, reconnecting...")
+                print("Reconnecting...")
                 self.disconnect()
                 if not self.connect():
                     return []
             
             for label in GMAIL_LABELS:
                 try:
-                    # Try with simpler label format first
-                    status, mailbox = self.imap.select(label)
+                    # Select label
+                    status, _ = self.imap.select(label, readonly=True)
                     if status != "OK":
-                        # Try with quoted format
-                        status, mailbox = self.imap.select(f'"{label}"')
+                        status, _ = self.imap.select(f'"{label}"', readonly=True)
                     if status != "OK":
-                        print(f"Couldn't select label {label}")
+                        print(f"  Label '{label}' not found")
                         continue
                     
-                    status, email_ids = self.imap.search(None, "UNSEEN")
+                    # Search for emails from the LAST 24 HOURS only
+                    yesterday = (datetime.now() - timedelta(days=1)).strftime("%d-%b-%Y")
+                    status, email_ids = self.imap.search(None, f'SINCE {yesterday}')
                     if status != "OK":
-                        print(f"Search failed for {label}")
                         continue
                     
-                    email_id_list = email_ids[0].split()
-                    new_emails = [eid for eid in email_id_list if (eid.decode() if isinstance(eid, bytes) else eid) not in seen_email_ids]
-                    print(f"Label {label}: Found {len(email_id_list)} unread, {len(new_emails)} new")
+                    email_list = email_ids[0].split()
+                    # We only care about the NEWEST emails (end of the list)
+                    recent_emails = email_list[-300:]
+                    new_ids = [
+                        e.decode() if isinstance(e, bytes) else e 
+                        for e in recent_emails 
+                        if (e.decode() if isinstance(e, bytes) else e) not in seen_email_ids
+                    ]
                     
-                    # Limit processing to avoid timeout
-                    for email_id in new_emails[:max_emails_per_label]:
+                    # Process up to limit
+                    count = 0
+                    for email_id in new_ids[:limit_per_label]:
                         email_id_str = email_id.decode() if isinstance(email_id, bytes) else email_id
                         
                         try:
-                            status, email_data = self.imap.fetch(email_id, "(RFC822)")
-                            if status == "OK" and email_data[0] and email_data[0][1]:
-                                parsed = self.parse_email(email_data[0][1])
-                                # Pass the label name to extract_alert_info
-                                alert = self.extract_alert_info(parsed, label=label)
+                            status, data = self.imap.fetch(email_id, "(RFC822)")
+                            if status == "OK" and data[0]:
+                                parsed = self.parse_email(data[0][1])
+                                alert = self.extract_alert(parsed, label)
                                 alerts.append(alert)
                                 seen_email_ids.add(email_id_str)
-                                print(f"  Processed email from {label}: {alert.title[:60]}")
-                                
-                                # Mark as read after successfully processing
-                                self.imap.store(email_id, "+FLAGS", "\\Seen")
-                        except Exception as e:
-                            print(f"Error processing email in {label}: {type(e).__name__}: {e}")
+                                count += 1
+                        except:
+                            pass
+                    
+                    if count > 0:
+                        print(f"  Label '{label}': fetched {count} alerts")
+                
                 except Exception as e:
-                    print(f"Error with label {label}: {type(e).__name__}: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    print(f"  Label '{label}' error: {e}")
             
             return alerts
+        
         except Exception as e:
-            print(f"Error fetching emails: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Fetch error: {e}")
             return []
 
-# Initialize Gmail service
+# Global service
 gmail_service: Optional[GmailService] = None
 
-async def poll_gmail():
-    """Background task to poll Gmail every 30 seconds"""
-    global latest_alert
-    
-    print("Starting Gmail polling task...")
-    await asyncio.sleep(2)  # Wait for startup to complete
+async def poll_alerts():
+    """Poll Gmail every 30 seconds"""
+    print("Poll task started")
+    await asyncio.sleep(3)
     
     loop = asyncio.get_event_loop()
     executor = ThreadPoolExecutor(max_workers=1)
     
+    poll_num = 0
     while True:
         try:
-            if gmail_service and gmail_service.imap:
-                print(f"Polling Gmail for new alerts... (tracking {len(seen_email_ids)} emails)")
-                # Run blocking IMAP operations in thread pool
-                new_alerts = await loop.run_in_executor(executor, gmail_service.fetch_unread_emails)
-                print(f"Found {len(new_alerts)} new alerts, total in store: {len(alerts_store)}")
+            poll_num += 1
+            if gmail_service:
+                print(f"\n[POLL {poll_num}] Fetching alerts...")
+                new_alerts = await loop.run_in_executor(executor, gmail_service.fetch_alerts)
+                print(f"[POLL {poll_num}] Got {len(new_alerts)} alerts")
                 
-                for alert in new_alerts:
-                    alerts_store[alert.id] = alert
-                    latest_alert = alert
-                    print(f"New alert: {alert.title} (Category: {alert.category})")
+                if new_alerts:
+                    for alert in new_alerts:
+                        if alert.status == 'firing':
+                            if alert.id not in alerts_store or alerts_store[alert.id].status == 'ok':
+                                alerts_store[alert.id] = alert
+                                print(f"  Started firing: {alert.title[:40]} | {alert.category}")
+                        elif alert.status == 'ok':
+                            if alert.id in alerts_store and alerts_store[alert.id].status == 'firing':
+                                # Calculate locked duration
+                                try:
+                                    from email.utils import parsedate_to_datetime
+                                    start_dt = parsedate_to_datetime(alerts_store[alert.id].timestamp).astimezone().replace(tzinfo=None)
+                                    end_dt = parsedate_to_datetime(alert.timestamp).astimezone().replace(tzinfo=None)
+                                    dur = max(0, int((end_dt - start_dt).total_seconds() / 60))
+                                except Exception as e:
+                                    dur = 0
+                                alerts_store[alert.id].status = 'ok'
+                                alerts_store[alert.id].durationMinutes = dur
+                                print(f"  Resolved: {alert.title[:40]} | dur: {dur}m")
+                    print(f"[POLL {poll_num}] Total in store: {len(alerts_store)}")
                     
-                    # Broadcast to connected WebSocket clients
-                    for connection in active_connections:
+                    # Broadcast to WebSocket
+                    for ws in active_connections:
                         try:
-                            await connection.send_json({
-                                "type": "new_alert",
-                                "alert": alert.dict()
-                            })
+                            await ws.send_json({"type": "new_alerts", "count": len(alerts_store)})
                         except:
                             pass
             
             await asyncio.sleep(30)
         except Exception as e:
-            print(f"Error in poll_gmail: {e}")
+            print(f"[POLL] Error: {e}")
+            import traceback
+            traceback.print_exc()
             await asyncio.sleep(30)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     global gmail_service
-    email_addr = os.getenv("GMAIL_EMAIL")
-    app_password = os.getenv("GMAIL_APP_PASSWORD")
+    import sys
+    sys.stdout.flush()
+    sys.stderr.flush()
     
-    if not email_addr or not app_password:
-        print("ERROR: GMAIL_EMAIL and GMAIL_APP_PASSWORD not set")
-    else:
-        gmail_service = GmailService(email_addr, app_password)
+    print("=== STARTING BACKEND ===", flush=True)
+    email = os.getenv("GMAIL_EMAIL")
+    password = os.getenv("GMAIL_APP_PASSWORD")
+    print(f"Gmail: {email}", flush=True)
+    
+    if email and password:
+        gmail_service = GmailService(email, password)
         if gmail_service.connect():
-            asyncio.create_task(poll_gmail())
+            print("Starting poll task...", flush=True)
+            asyncio.create_task(poll_alerts())
+            print("Poll task created", flush=True)
     
     yield
     
     # Shutdown
+    print("Shutting down...", flush=True)
     if gmail_service:
         gmail_service.disconnect()
 
-app = FastAPI(title="Alert Backend", lifespan=lifespan)
+app = FastAPI(lifespan=lifespan)
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -315,75 +318,74 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# REST API Endpoints
-
-@app.get("/api/alerts", response_model=List[Alert])
+@app.get("/api/alerts")
 async def get_alerts():
-    """Get all active alerts"""
-    return list(alerts_store.values())
+    """Get all alerts with calculated duration from original email timestamp"""
+    now = datetime.now()
+    result_alerts = []
 
-@app.get("/api/alerts/latest", response_model=Optional[Alert])
-async def get_latest_alert():
-    """Get newest alert"""
-    return latest_alert
+    for alert in alerts_store.values():
+        # ── Duration is calculated dynamically if firing, otherwise use locked duration ──
+        if alert.status == 'firing':
+            try:
+                from email.utils import parsedate_to_datetime
+                import datetime as dt_mod
+                email_dt = parsedate_to_datetime(alert.timestamp)
+                # Convert email_dt to local naive datetime
+                email_dt_local = email_dt.astimezone().replace(tzinfo=None)
+                duration = max(0, int((now - email_dt_local).total_seconds() / 60))
+            except Exception as e:
+                duration = 0
+        else:
+            duration = alert.durationMinutes
 
-@app.post("/api/alerts/refresh")
-async def refresh_alerts():
-    """Manually trigger Gmail check"""
-    if not gmail_service:
-        return {"error": "Gmail service not configured"}
-    
-    new_alerts = gmail_service.fetch_unread_emails()
-    
-    for alert in new_alerts:
-        alerts_store[alert.id] = alert
-    
-    return {"fetched": len(new_alerts), "total": len(alerts_store)}
+        result_alerts.append({
+            "id":              alert.id,
+            "title":          alert.title,
+            "name":           alert.title,
+            "email":          alert.server,
+            "server":         alert.server,
+            "status":         alert.status,
+            "alertType":      alert.category.lower(),
+            "category":       alert.category,
+            "durationMinutes": duration,
+            "timestamp":      alert.timestamp,
+            "firstSeenAt":    alert.firstSeenAt,
+            "description":    alert.description,
+            "emailMessageId": alert.emailMessageId
+        })
 
-# WebSocket Endpoint
+    return {"alerts": result_alerts}
 
 @app.websocket("/ws/alerts")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket for real-time alert updates"""
     await websocket.accept()
     active_connections.append(websocket)
     
     try:
-        # Send current alerts on connect
         await websocket.send_json({
             "type": "initial",
-            "alerts": [alert.dict() for alert in alerts_store.values()]
+            "alerts": [a.dict() for a in alerts_store.values()]
         })
         
-        # Keep connection alive
         while True:
-            data = await websocket.receive_text()
-            if data == "ping":
-                await websocket.send_text("pong")
-    
+            await websocket.receive_text()
     except WebSocketDisconnect:
         active_connections.remove(websocket)
 
-@app.post("/api/alerts/clear")
-async def clear_alerts(body: dict = None):
-    """Clear alerts by category or all alerts"""
-    global alerts_store
-    
-    if body and body.get("category"):
-        category = body["category"].upper()
-        alerts_to_remove = [aid for aid, alert in alerts_store.items() if alert.category.upper() == category]
-        for aid in alerts_to_remove:
-            del alerts_store[aid]
-        return {"cleared": len(alerts_to_remove), "category": category, "remaining": len(alerts_store)}
-    else:
-        cleared_count = len(alerts_store)
-        alerts_store.clear()
-        return {"cleared": cleared_count, "message": "All alerts cleared", "remaining": 0}
+@app.post("/api/alerts/{alert_id}/acknowledge")
+async def acknowledge_alert(alert_id: str):
+    if alert_id in alerts_store:
+        del alerts_store[alert_id]
+    return {"success": True}
 
 @app.get("/health")
 async def health():
-    """Health check endpoint"""
-    return {"status": "ok", "alerts_count": len(alerts_store)}
+    return {
+        "status": "ok",
+        "alerts": len(alerts_store),
+        "seen_emails": len(seen_email_ids)
+    }
 
 if __name__ == "__main__":
     import uvicorn

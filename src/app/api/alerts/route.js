@@ -19,16 +19,17 @@ async function notifyGoogleChat(alert, durationMinutes) {
   }
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-    
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     const res = await fetch(`${backendUrl}/api/alerts`, {
       signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store'
     });
 
     clearTimeout(timeoutId);
@@ -40,46 +41,50 @@ export async function GET() {
       }, { status: res.status });
     }
 
-    const alerts = await res.json();
+    const data = await res.json();
+    const alerts = data.alerts || [];
 
     const formattedAlerts = alerts.map(alert => {
-      const durationMinutes = calculateDurationMinutes(alert.timestamp);
-      const statusString = String(alert.status || '').toLowerCase();
-      const titleString = String(alert.title || '').toLowerCase();
-      
-      // Check if we need to send a webhook
-      // It must NOT be 'ok' or 'resolved', must be firing for >= 90 mins, and must NOT be an "info" alert
-      if (
-        statusString !== 'ok' && 
-        statusString !== 'resolved' && 
-        statusString !== 'healthy' && 
-        durationMinutes >= 90 &&
-        !titleString.includes('info')
-      ) {
-        const uniqueKey = `${alert.title}-${alert.server}-${alert.timestamp}`;
+      // Backend now calculates duration correctly from firstSeenAt
+      const durationMinutes = typeof alert.durationMinutes === 'number' ? alert.durationMinutes : 0;
+      const statusString    = String(alert.status || '').toLowerCase();
+      const titleString     = String(alert.name || alert.title || '').toLowerCase();
+      const category        = (alert.alertType || alert.category || 'unknown').toLowerCase();
+
+      // Send Google Chat webhook for overdue firing alerts (not ok/resolved, not info)
+      const isActive  = statusString !== 'ok' && statusString !== 'resolved' && statusString !== 'healthy';
+      const isOverdue = shouldBeOverdue(category, durationMinutes);
+
+      if (isActive && isOverdue && !titleString.includes('info')) {
+        const uniqueKey = `${alert.id || alert.name}-${alert.status}`;
         if (!global.notifiedAlerts.has(uniqueKey)) {
           global.notifiedAlerts.add(uniqueKey);
-          notifyGoogleChat(alert, durationMinutes);
+          notifyGoogleChat(
+            { name: alert.name || alert.title, server: alert.server || alert.email, description: alert.description },
+            durationMinutes
+          );
         }
       }
 
       return {
-        name: alert.title,
-        email: alert.server,
-        status: alert.status,
-        alertType: alert.category.toLowerCase(),
+        id:             alert.id,
+        name:           alert.name || alert.title || 'Unknown Alert',
+        email:          alert.email || alert.server || 'unknown',
+        status:         alert.status,
+        alertType:      category,
         durationMinutes,
-        timestamp: alert.timestamp,
-        description: alert.description,
-        isOverdue: shouldBeOverdue(alert.category, durationMinutes)
+        timestamp:      alert.timestamp,
+        firstSeenAt:    alert.firstSeenAt,
+        description:    alert.description,
+        isOverdue:      isActive && isOverdue,
       };
     });
 
     return Response.json({ alerts: formattedAlerts });
   } catch (err) {
-    console.error('Alert fetch error:', err);
+    console.error('[ALERTS API] Error:', err?.message);
     return Response.json({
-      error: 'Backend connection failed. Make sure FastAPI service is running on http://localhost:8000',
+      error: `Backend connection failed: ${err?.message}. Make sure FastAPI is running on http://localhost:8000`,
       alerts: []
     }, { status: 500 });
   }
@@ -96,6 +101,9 @@ function calculateDurationMinutes(timestamp) {
 }
 
 function shouldBeOverdue(category, durationMinutes) {
-  const threshold = (category === 'CPU' || category === 'Memory' || category === 'Disk') ? 5 : 90;
+  // Infrastructure alerts: 5-minute threshold (these need immediate action)
+  const quickThreshold = ['cpu', 'memory', 'disk', 'port', 'db'];
+  // Service/HTTP alerts: 90-minute threshold
+  const threshold = quickThreshold.includes(category.toLowerCase()) ? 5 : 90;
   return durationMinutes >= threshold;
 }
